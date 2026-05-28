@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CK Body RPG</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0f0f1a;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .header { text-align: center; padding: 20px 0 12px; }
+  .header h1 { font-size: 1.4rem; color: #f5c842; letter-spacing: 2px; }
+  .header p { font-size: 0.75rem; color: #888; margin-top: 4px; }
+
+  .coin-card {
+    background: linear-gradient(135deg, #1e1e35, #2a2a4a);
+    border: 1px solid #f5c842;
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    margin: 16px 0;
+    box-shadow: 0 0 20px rgba(245,200,66,0.15);
+  }
+  .coin-amount { font-size: 3rem; font-weight: bold; color: #f5c842; line-height: 1; }
+  .coin-label { font-size: 0.8rem; color: #aaa; margin-top: 4px; }
+  .streak-badge {
+    display: inline-block;
+    background: #ff6b35;
+    color: white;
+    font-size: 0.75rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-top: 10px;
+  }
+
+  .section-title {
+    font-size: 0.75rem;
+    color: #888;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 20px 0 10px;
+  }
+
+  .mission-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mission-card:active { transform: scale(0.98); }
+  .mission-card.done { opacity: 0.5; border-color: #3a3a5a; }
+  .mission-card.done .mission-name { text-decoration: line-through; }
+  .mission-icon { font-size: 1.8rem; min-width: 36px; text-align: center; }
+  .mission-info { flex: 1; }
+  .mission-name { font-size: 0.95rem; font-weight: 600; }
+  .mission-desc { font-size: 0.75rem; color: #888; margin-top: 2px; }
+  .mission-coin {
+    background: #f5c842;
+    color: #0f0f1a;
+    font-weight: bold;
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .mission-card.done .mission-coin { background: #444; color: #888; }
+
+  .reward-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .reward-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 14px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .reward-card:active { transform: scale(0.96); }
+  .reward-card.unlocked { border-color: #4caf50; }
+  .reward-card.locked { opacity: 0.5; }
+  .reward-icon { font-size: 2rem; margin-bottom: 6px; }
+  .reward-name { font-size: 0.85rem; font-weight: 600; }
+  .reward-cost { font-size: 0.8rem; color: #f5c842; margin-top: 4px; }
+  .reward-card.locked .reward-cost { color: #888; }
+  .reward-status { font-size: 0.65rem; margin-top: 4px; color: #4caf50; }
+  .reward-card.locked .reward-status { color: #666; }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #1e1e35;
+    font-size: 0.82rem;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-desc { color: #ccc; }
+  .history-coin { color: #f5c842; font-weight: bold; }
+  .history-coin.spent { color: #ff6b6b; }
+
+  .weight-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 10px;
+  }
+  .weight-current {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .weight-stat { text-align: center; }
+  .weight-val { font-size: 1.6rem; font-weight: bold; color: #f5c842; }
+  .weight-unit { font-size: 0.7rem; color: #888; margin-top: 2px; }
+  .weight-goal { font-size: 0.7rem; color: #4caf50; margin-top: 2px; }
+  .weight-form { display: flex; gap: 8px; margin-bottom: 0; }
+  .weight-input {
+    flex: 1;
+    background: #0f0f1a;
+    border: 1px solid #333;
+    color: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    width: 100%;
+  }
+  .weight-input:focus { outline: none; border-color: #f5c842; }
+  .weight-btn {
+    background: #f5c842;
+    color: #0f0f1a;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .weight-history { margin-top: 8px; }
+  .weight-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    padding: 5px 0;
+    border-bottom: 1px solid #1e1e35;
+    color: #aaa;
+  }
+  .weight-row:last-child { border-bottom: none; }
+  .weight-row .date { color: #666; }
+  .weight-row .vals { color: #ccc; }
+
+  .fat-bar-wrap { margin: 10px 0 4px; }
+  .fat-bar-label { display: flex; justify-content: space-between; font-size: 0.72rem; color: #888; margin-bottom: 4px; }
+  .fat-bar-bg { background: #0f0f1a; border-radius: 8px; height: 8px; overflow: hidden; }
+  .fat-bar-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, #4caf50, #f5c842, #ff6b35); transition: width 0.5s; }
+
+  /* Weight chart */
+  .chart-wrap { position: relative; height: 160px; margin: 14px 0 12px; }
+  .chart-wrap.hidden { display: none; }
+
+  /* Sync card */
+  .sync-card {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .sync-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .sync-status { font-size: 0.82rem; font-weight: 600; }
+  .sync-hint { font-size: 0.72rem; color: #666; margin-top: 6px; }
+
+  .reset-btn {
+    width: 100%;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    color: #666;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-top: 20px;
+    margin-bottom: 32px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #f5c842;
+    color: #0f0f1a;
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-weight: bold;
+    font-size: 0.9rem;
+    transition: transform 0.3s;
+    z-index: 999;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #1a1a2e;
+    border: 1px solid #f5c842;
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+  }
+  .modal h2 { font-size: 1.5rem; margin-bottom: 8px; }
+  .modal p { color: #aaa; font-size: 0.85rem; margin-bottom: 20px; }
+  .modal-btn {
+    display: inline-block;
+    padding: 10px 28px;
+    border-radius: 30px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    font-size: 0.9rem;
+  }
+  .modal-confirm { background: #f5c842; color: #0f0f1a; }
+  .modal-cancel { background: #2a2a4a; color: #aaa; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚔️ CK BODY RPG</h1>
+  <p>แปลงเหงื่อเป็น coin แลกของกิน</p>
+</div>
+
+<div class="coin-card">
+  <div class="coin-amount" id="coinDisplay">0</div>
+  <div class="coin-label">🪙 COINS</div>
+  <div class="streak-badge" id="streakDisplay">🔥 0 วัน streak</div>
+</div>
+
+<div class="section-title">⚡ ภารกิจวันนี้</div>
+<div id="missionList"></div>
+
+<div class="section-title">🏪 ร้านแลก coin</div>
+<div class="reward-grid" id="rewardGrid"></div>
+
+<div class="section-title">⚖️ บันทึกน้ำหนัก</div>
+<div class="weight-card">
+  <div class="weight-current">
+    <div class="weight-stat">
+      <div class="weight-val" id="wLatestKg">—</div>
+      <div class="weight-unit">กก.</div>
+    </div>
+    <div class="weight-stat">
+      <div class="weight-val" id="wLatestFat">—</div>
+      <div class="weight-unit">% ไขมัน</div>
+      <div class="weight-goal">เป้า 19%</div>
+    </div>
+    <div class="weight-stat">
+      <div class="weight-val" id="wDelta">—</div>
+      <div class="weight-unit">เทียบ 7 วัน</div>
+    </div>
+  </div>
+  <div class="weight-current" style="margin-top:6px">
+    <div class="weight-stat">
+      <div class="weight-val" id="wLatestMuscle" style="font-size:1.2rem">—</div>
+      <div class="weight-unit">💪 กล้าม (กก.)</div>
+    </div>
+    <div class="weight-stat">
+      <div class="weight-val" id="wLatestWater" style="font-size:1.2rem">—</div>
+      <div class="weight-unit">💧 น้ำ (%)</div>
+    </div>
+    <div class="weight-stat">
+      <div class="weight-val" id="wLatestBone" style="font-size:1.2rem">—</div>
+      <div class="weight-unit">🦴 กระดูก (กก.)</div>
+    </div>
+  </div>
+  <div class="fat-bar-wrap">
+    <div class="fat-bar-label"><span>ไขมัน</span><span id="wFatLabel">—%</span><span>เป้า 19%</span></div>
+    <div class="fat-bar-bg"><div class="fat-bar-fill" id="wFatBar" style="width:0%"></div></div>
+  </div>
+
+  <!-- Weight Progress Chart (แสดงเมื่อมีข้อมูล ≥ 2 วัน) -->
+  <div class="chart-wrap hidden" id="chartWrap">
+    <canvas id="weightChart"></canvas>
+  </div>
+
+  <div class="weight-form" style="margin-top:14px">
+    <input class="weight-input" id="wKgInput" type="number" step="0.01" placeholder="น้ำหนัก (กก.)">
+    <input class="weight-input" id="wFatInput" type="number" step="0.1" placeholder="ไขมัน (%)">
+  </div>
+  <div class="weight-form" style="margin-top:8px">
+    <input class="weight-input" id="wMuscleInput" type="number" step="0.01" placeholder="กล้าม (กก.)">
+    <input class="weight-input" id="wWaterInput" type="number" step="0.1" placeholder="น้ำ (%)">
+    <input class="weight-input" id="wBoneInput" type="number" step="0.01" placeholder="กระดูก (กก.)">
+    <button class="weight-btn" onclick="logWeight()">บันทึก</button>
+  </div>
+  <div class="weight-history" id="weightHistory"></div>
+</div>
+
+<div class="section-title">📜 ประวัติล่าสุด</div>
+<div id="historyList"></div>
+
+<!-- Cloud Sync Section -->
+<div class="section-title">☁️ Cloud Sync</div>
+<div class="sync-card">
+  <div class="sync-row">
+    <div class="sync-status" id="syncStatus">⚫ ออฟไลน์</div>
+    <button class="weight-btn" style="font-size:0.75rem;padding:5px 12px" onclick="manualSync()">🔄 sync ตอนนี้</button>
+  </div>
+  <div style="font-size:0.8rem; color:#aaa; margin-bottom:10px">
+    ใส่ sync key เดียวกันทุกเครื่อง → ข้อมูล sync อัตโนมัติ
+  </div>
+  <div style="display:flex; gap:8px">
+    <input class="weight-input" id="syncKeyInput" type="password" placeholder="sync key (อย่างน้อย 6 ตัว)">
+    <button class="weight-btn" onclick="applySyncKey()">เชื่อม</button>
+  </div>
+  <div class="sync-hint" id="syncHint"></div>
+</div>
+
+<button class="reset-btn" onclick="confirmReset()">รีเซ็ตภารกิจรายวัน (ทำทุกเช้า)</button>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modalEmoji">🎉</h2>
+    <h2 id="modalTitle">title</h2>
+    <p id="modalDesc">desc</p>
+    <button class="modal-btn modal-confirm" id="modalConfirm">ยืนยัน</button>
+    <button class="modal-btn modal-cancel" onclick="closeModal()">ยกเลิก</button>
+  </div>
+</div>
+
+<script>
+// ─── FIREBASE CONFIG ──────────────────────────────────────
+// ขั้นตอน (ทำ 1 ครั้ง):
+// 1. console.firebase.google.com → Add project → ตั้งชื่อ → Create
+// 2. Build → Firestore Database → Create database → Start in test mode
+// 3. Project Overview → </> (Add web app) → Register → copy config มาใส่ด้านล่าง
+const FB_CONFIG = {
+  apiKey:     "PASTE_YOUR_API_KEY",
+  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
+  projectId:  "PASTE_YOUR_PROJECT_ID",
+};
+const FB_READY = FB_CONFIG.apiKey !== "PASTE_YOUR_API_KEY";
+
+let db = null;
+let syncKey = localStorage.getItem('ck_sync_key') || '';
+let _saveTimer = null;
+
+// ─── APP CONFIG ───────────────────────────────────────────
+const MISSIONS = [
+  { id: 'm1', icon: '🚶', name: 'เดิน 7,000 ก้าว',    desc: 'ก้าวเดินขั้นต่ำ (Xiaomi Band)', coin: 1 },
+  { id: 'm2', icon: '🏃', name: 'เดิน 10,000 ก้าว',   desc: 'ก้าวเดิน full day bonus',        coin: 2 },
+  { id: 'm3', icon: '💪', name: 'ออกกำลังกาย 20 นาที', desc: 'วิ่ง / ยืดเส้น / บอดี้เวท',    coin: 2 },
+  { id: 'm4', icon: '🏸', name: 'แบดมินตัน 1 session', desc: 'เล่นกับทีม SNOWITE',            coin: 3 },
+  { id: 'm5', icon: '🚫', name: 'งดขนมหวาน 1 วัน',     desc: 'ไม่กินของหวาน/น้ำตาลทั้งวัน',  coin: 2 },
+];
+
+const REWARDS = [
+  { id: 'r1', icon: '🍗', name: 'ไก่ทอด',        cost: 5,  desc: '1 ชิ้น ไม่ต้องกลั้วใจ' },
+  { id: 'r2', icon: '🍟', name: 'เฟรนช์ฟรายส์', cost: 4,  desc: 'size เล็กก็พอ' },
+  { id: 'r3', icon: '🍰', name: 'ขนม/เค้ก',      cost: 5,  desc: '1 ชิ้น ห้ามเกิน' },
+  { id: 'r4', icon: '🍺', name: 'เบียร์ 1 แก้ว', cost: 10, desc: 'ต้องมี 10 coin ขึ้นไป' },
+];
+
+// ─── STATE ────────────────────────────────────────────────
+let state = JSON.parse(localStorage.getItem('ck_rpg') || 'null') || {
+  coins: 0, streak: 0, lastReset: '', doneMissions: [], history: [],
+};
+let wState = JSON.parse(localStorage.getItem('ck_weight') || '[]');
+
+function save() {
+  localStorage.setItem('ck_rpg', JSON.stringify(state));
+  scheduleCloudSave();
+}
+function saveWeight() {
+  localStorage.setItem('ck_weight', JSON.stringify(wState));
+  scheduleCloudSave();
+}
+
+// ─── FIREBASE / CLOUD SYNC ────────────────────────────────
+function fbInit() {
+  if (!FB_READY) { updateSyncUI('noconfig'); return; }
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    db = firebase.firestore();
+    if (syncKey) {
+      updateSyncUI('connecting');
+      loadFromCloud();
+    } else {
+      updateSyncUI('nokey');
+    }
+  } catch(e) {
+    console.error('Firebase init error', e);
+    updateSyncUI('error');
+  }
+}
+
+function updateSyncUI(status) {
+  const el = document.getElementById('syncStatus');
+  const hint = document.getElementById('syncHint');
+  const map = {
+    noconfig:   '⚙️ ยังไม่ได้ใส่ Firebase config',
+    nokey:      '🔑 รอ sync key',
+    connecting: '🔄 กำลัง connect...',
+    syncing:    '🔄 กำลัง sync...',
+    synced:     '🟢 Synced',
+    error:      '🔴 Sync ล้มเหลว',
+  };
+  if (el) el.textContent = map[status] || status;
+  if (hint && syncKey && status === 'synced') {
+    hint.textContent = `key: ${syncKey.slice(0, 3)}*** · sync แล้ว`;
+  }
+  if (hint && status === 'noconfig') {
+    hint.textContent = 'ใส่ Firebase config ในโค้ดก่อน แล้ว deploy ใหม่';
+  }
+}
+
+async function loadFromCloud() {
+  if (!db || !syncKey) return;
+  updateSyncUI('syncing');
+  try {
+    const doc = await db.collection('ck_rpg').doc(syncKey).get();
+    if (doc.exists) {
+      const data = doc.data();
+      const cloudTs  = data.updatedAt || 0;
+      const localTs  = state.updatedAt || 0;
+      const cloudWTs = data.weightUpdatedAt || 0;
+      const localWTs = parseInt(localStorage.getItem('ck_weight_ts') || '0', 10);
+
+      if (cloudTs > localTs && data.state) {
+        state = { ...data.state };
+        localStorage.setItem('ck_rpg', JSON.stringify(state));
+        render();
+      }
+      if (cloudWTs > localWTs && Array.isArray(data.weight)) {
+        wState = data.weight;
+        localStorage.setItem('ck_weight', JSON.stringify(wState));
+        localStorage.setItem('ck_weight_ts', String(cloudWTs));
+        renderWeight();
+        renderChart();
+      }
+    }
+    updateSyncUI('synced');
+  } catch(e) {
+    console.error('loadFromCloud error', e);
+    updateSyncUI('error');
+  }
+}
+
+function scheduleCloudSave() {
+  if (!db || !syncKey) return;
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveToCloud, 1200);
+}
+
+async function saveToCloud() {
+  if (!db || !syncKey) return;
+  updateSyncUI('syncing');
+  const now = Date.now();
+  state.updatedAt = now;
+  try {
+    await db.collection('ck_rpg').doc(syncKey).set({
+      state: JSON.parse(JSON.stringify(state)),
+      weight: wState,
+      updatedAt: now,
+      weightUpdatedAt: now,
+    });
+    localStorage.setItem('ck_rpg', JSON.stringify(state));
+    localStorage.setItem('ck_weight_ts', String(now));
+    updateSyncUI('synced');
+  } catch(e) {
+    console.error('saveToCloud error', e);
+    updateSyncUI('error');
+  }
+}
+
+function manualSync() {
+  if (!FB_READY) { showToast('ใส่ Firebase config ในโค้ดก่อน'); return; }
+  if (!syncKey)  { showToast('ใส่ sync key ก่อนนะ'); return; }
+  if (!db)       { showToast('Firebase ไม่พร้อม'); return; }
+  loadFromCloud();
+}
+
+function applySyncKey() {
+  const val = document.getElementById('syncKeyInput').value.trim();
+  if (!val)        { showToast('ใส่ key ก่อนนะ'); return; }
+  if (val.length < 6) { showToast('key ต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+  syncKey = val;
+  localStorage.setItem('ck_sync_key', syncKey);
+  document.getElementById('syncKeyInput').value = '';
+  if (!FB_READY) { showToast('ตั้งค่า Firebase ในโค้ดก่อนนะ'); return; }
+  if (!db) { fbInit(); return; }
+  updateSyncUI('connecting');
+  loadFromCloud();
+  showToast('🔗 กำลัง sync...');
+}
+
+// ─── RENDER ───────────────────────────────────────────────
+function render() {
+  document.getElementById('coinDisplay').textContent = state.coins;
+  document.getElementById('streakDisplay').textContent = `🔥 ${state.streak} วัน streak`;
+
+  const ml = document.getElementById('missionList');
+  ml.innerHTML = '';
+  MISSIONS.forEach(m => {
+    const done = state.doneMissions.includes(m.id);
+    const div = document.createElement('div');
+    div.className = `mission-card${done ? ' done' : ''}`;
+    div.innerHTML = `
+      <div class="mission-icon">${m.icon}</div>
+      <div class="mission-info">
+        <div class="mission-name">${m.name}</div>
+        <div class="mission-desc">${m.desc}</div>
+      </div>
+      <div class="mission-coin">+${m.coin} 🪙</div>
+    `;
+    if (!done) div.onclick = () => completeMission(m);
+    ml.appendChild(div);
+  });
+
+  const rg = document.getElementById('rewardGrid');
+  rg.innerHTML = '';
+  REWARDS.forEach(r => {
+    const canAfford = state.coins >= r.cost;
+    const div = document.createElement('div');
+    div.className = `reward-card ${canAfford ? 'unlocked' : 'locked'}`;
+    div.innerHTML = `
+      <div class="reward-icon">${r.icon}</div>
+      <div class="reward-name">${r.name}</div>
+      <div class="reward-cost">${r.cost} 🪙</div>
+      <div class="reward-status">${canAfford ? '✓ พร้อมแลก' : `ขาดอีก ${r.cost - state.coins}`}</div>
+    `;
+    if (canAfford) div.onclick = () => redeemReward(r);
+    rg.appendChild(div);
+  });
+
+  const hl = document.getElementById('historyList');
+  const recent = [...state.history].reverse().slice(0, 6);
+  hl.innerHTML = recent.length === 0
+    ? '<div style="color:#555;font-size:0.8rem;padding:8px 0">ยังไม่มีประวัติ — เริ่มทำภารกิจแรกได้เลย</div>'
+    : recent.map(h => `
+        <div class="history-item">
+          <span class="history-desc">${h.desc}</span>
+          <span class="history-coin ${h.coin < 0 ? 'spent' : ''}">${h.coin > 0 ? '+' : ''}${h.coin} 🪙</span>
+        </div>`).join('');
+}
+
+// ─── ACTIONS ──────────────────────────────────────────────
+function completeMission(m) {
+  state.doneMissions.push(m.id);
+  state.coins += m.coin;
+  state.history.push({ desc: m.icon + ' ' + m.name, coin: m.coin, date: today() });
+  save();
+  render();
+  showToast(`+${m.coin} 🪙 ${m.name} สำเร็จ!`);
+}
+
+function redeemReward(r) {
+  showModal(r.icon, `แลก ${r.name}?`, `ใช้ ${r.cost} coin — ${r.desc}`, () => {
+    state.coins -= r.cost;
+    state.history.push({ desc: '🏪 แลก ' + r.name, coin: -r.cost, date: today() });
+    save();
+    render();
+    closeModal();
+    showToast(`${r.icon} เย้! ได้ ${r.name} แล้ว`);
+  });
+}
+
+function confirmReset() {
+  const anyDone = state.doneMissions.length > 0;
+  showModal('🔄', 'รีเซ็ตภารกิจ',
+    anyDone
+      ? `ทำภารกิจครบวันนี้แล้ว ${state.doneMissions.length}/${MISSIONS.length} อย่าง`
+      : 'ยังไม่ได้ทำภารกิจวันนี้เลย',
+    () => {
+      state.streak = anyDone ? state.streak + 1 : 0;
+      state.doneMissions = [];
+      state.lastReset = today();
+      save();
+      render();
+      closeModal();
+      showToast('🌅 เริ่มวันใหม่ ภารกิจรีเซ็ตแล้ว');
+    }
+  );
+}
+
+// ─── WEIGHT CHART ─────────────────────────────────────────
+let weightChart = null;
+
+function renderChart() {
+  const wrap = document.getElementById('chartWrap');
+  if (wState.length < 2) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+
+  const entries = wState.slice(-30);
+  const labels  = entries.map(e => e.date.slice(5));
+  const kgData  = entries.map(e => e.kg);
+  const fatData = entries.map(e => e.fat ?? null);
+  const hasFat  = fatData.some(v => v !== null);
+  const ptR     = entries.length > 15 ? 2 : 3;
+
+  const datasets = [{
+    label: 'น้ำหนัก (กก.)',
+    data: kgData,
+    borderColor: '#f5c842',
+    backgroundColor: 'rgba(245,200,66,0.08)',
+    fill: true,
+    tension: 0.4,
+    yAxisID: 'y',
+    pointRadius: ptR,
+    borderWidth: 2,
+  }];
+
+  if (hasFat) {
+    datasets.push({
+      label: 'ไขมัน (%)',
+      data: fatData,
+      borderColor: '#ff6b35',
+      borderDash: [5, 3],
+      fill: false,
+      tension: 0.4,
+      yAxisID: 'y2',
+      pointRadius: ptR,
+      borderWidth: 1.5,
+      spanGaps: true,
+    });
+  }
+
+  const scalesConfig = {
+    x: {
+      grid: { color: 'rgba(255,255,255,0.05)' },
+      ticks: { color: '#666', font: { size: 9 }, maxTicksLimit: 8 },
+    },
+    y: {
+      position: 'left',
+      grid: { color: 'rgba(255,255,255,0.05)' },
+      ticks: { color: '#f5c842', font: { size: 9 } },
+    },
+  };
+  if (hasFat) {
+    scalesConfig.y2 = {
+      position: 'right',
+      grid: { display: false },
+      ticks: { color: '#ff6b35', font: { size: 9 } },
+    };
+  }
+
+  if (weightChart) {
+    weightChart.data.labels   = labels;
+    weightChart.data.datasets = datasets;
+    weightChart.options.scales = scalesConfig;
+    weightChart.update();
+  } else {
+    weightChart = new Chart(
+      document.getElementById('weightChart').getContext('2d'),
+      {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#888', font: { size: 10 }, boxWidth: 10, padding: 8 },
+            },
+          },
+          scales: scalesConfig,
+        },
+      }
+    );
+  }
+}
+
+// ─── WEIGHT LOG ───────────────────────────────────────────
+function logWeight() {
+  const kg     = parseFloat(document.getElementById('wKgInput').value);
+  const fat    = parseFloat(document.getElementById('wFatInput').value);
+  const muscle = parseFloat(document.getElementById('wMuscleInput').value);
+  const water  = parseFloat(document.getElementById('wWaterInput').value);
+  const bone   = parseFloat(document.getElementById('wBoneInput').value);
+  if (isNaN(kg)) { showToast('ใส่น้ำหนักด้วย'); return; }
+  wState.push({
+    date: today(), kg,
+    fat:    isNaN(fat)    ? null : fat,
+    muscle: isNaN(muscle) ? null : muscle,
+    water:  isNaN(water)  ? null : water,
+    bone:   isNaN(bone)   ? null : bone,
+  });
+  saveWeight();
+  ['wKgInput','wFatInput','wMuscleInput','wWaterInput','wBoneInput']
+    .forEach(id => document.getElementById(id).value = '');
+  renderWeight();
+  renderChart();
+  showToast('⚖️ บันทึกน้ำหนักแล้ว!');
+}
+
+function renderWeight() {
+  if (wState.length === 0) return;
+  const latest = wState[wState.length - 1];
+  const fmt = (v, d) => v != null ? v.toFixed(d) : '—';
+
+  document.getElementById('wLatestKg').textContent     = fmt(latest.kg, 2);
+  document.getElementById('wLatestFat').textContent    = fmt(latest.fat, 1);
+  document.getElementById('wLatestMuscle').textContent = fmt(latest.muscle, 2);
+  document.getElementById('wLatestWater').textContent  = fmt(latest.water, 1);
+  document.getElementById('wLatestBone').textContent   = fmt(latest.bone, 2);
+
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+  const old = [...wState].reverse().find(r => new Date(r.date) <= cutoff);
+  if (old) {
+    const diff = latest.kg - old.kg;
+    document.getElementById('wDelta').textContent = (diff > 0 ? '+' : '') + diff.toFixed(2) + ' กก.';
+  }
+
+  if (latest.fat != null) {
+    const pct = Math.min(Math.max((latest.fat - 15) / 15 * 100, 0), 100);
+    document.getElementById('wFatBar').style.width = pct + '%';
+    document.getElementById('wFatLabel').textContent = latest.fat.toFixed(1) + '%';
+  }
+
+  const rows = [...wState].reverse().slice(0, 7);
+  document.getElementById('weightHistory').innerHTML = rows.map(r => `
+    <div class="weight-row">
+      <span class="date">${r.date}</span>
+      <span class="vals">
+        ${fmt(r.kg,2)} กก.
+        ${r.fat    != null ? ' · ' + fmt(r.fat,1)    + '% ไขมัน' : ''}
+        ${r.muscle != null ? ' · ' + fmt(r.muscle,2) + ' กก.กล้าม' : ''}
+        ${r.water  != null ? ' · ' + fmt(r.water,1)  + '% น้ำ' : ''}
+        ${r.bone   != null ? ' · ' + fmt(r.bone,2)   + ' กก.กระดูก' : ''}
+      </span>
+    </div>`).join('');
+}
+
+// ─── UI HELPERS ───────────────────────────────────────────
+function showModal(emoji, title, desc, onConfirm) {
+  document.getElementById('modalEmoji').textContent  = emoji;
+  document.getElementById('modalTitle').textContent  = title;
+  document.getElementById('modalDesc').textContent   = desc;
+  document.getElementById('modal').classList.add('show');
+  document.getElementById('modalConfirm').onclick    = onConfirm;
+}
+function closeModal() { document.getElementById('modal').classList.remove('show'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
+// ─── INIT ─────────────────────────────────────────────────
+render();
+renderWeight();
+renderChart();
+fbInit();
+if (syncKey) {
+  document.getElementById('syncHint').textContent = `key: ${syncKey.slice(0,3)}*** · กำลัง connect...`;
+}
+</script>
+</body>
+</html>
