@@ -22,8 +22,11 @@ Body Composition Tracker ของ CK เอง (ไม่ใช่งาน ศ
 
 ## กฎที่ต้องไม่ลืม
 
-- **ห้ามบอกให้รัน `setupTracker` เพื่อแก้ตัวเลขเดียว** — มันสร้างชีต Log ใหม่จาก `hist` 21 จุด (ถึง 7 ส.ค. 69) ผลชั่งหลังจากนั้นหายหมด
-  แก้ baseline ในชีตใช้เมนู "อัปเดต baseline ในชีต Dashboard" = `refreshBaselineInSheet()` เขียนแค่ B11 · หน้าเว็บคำนวณจาก `CFG` สดอยู่แล้ว ไม่ต้องรันอะไร
+- **`setupTracker` ลบข้อมูลไม่ได้แล้วตั้งแต่ v11 (5 ต.ค. 69)** — แยก `build*Chrome_` (โครง เรียกซ้ำได้) ออกจาก `seed*_` (ลงเฉพาะชีตว่าง)
+  ชีตข้อมูลใช้ `dataSheet_` · `resetSheet_` เหลือใช้กับ Dashboard ชีตเดียว · เมนูเปลี่ยนชื่อเป็น "ติดตั้ง / ซ่อมโครงชีต (ไม่ลบข้อมูล)"
+  **ถ้าจะเพิ่มชีตที่เก็บข้อมูล ต้องแยก chrome/seed ตั้งแต่แรก** และเขียนเคสลง `testSetupNonDestructive()`
+  (ประวัติ: ก่อน v11 `resetSheet_` + `hist` 21 จุดเขียนทับ = ผลชั่งหลัง 7 ส.ค. หายเงียบ เกือบเสีย 6 แถว)
+- แก้ baseline ในชีตใช้เมนู "อัปเดต baseline ในชีต Dashboard" = `refreshBaselineInSheet()` · หน้าเว็บคำนวณจาก `CFG` สดอยู่แล้ว ไม่ต้องรันอะไร
 - ชีตใหม่ให้สร้างแบบ lazy (`waterSheet_()` / `drinkSheet_()` / `coinSheet_()`) ห้ามไปผูกกับ `setupTracker`
 - **แผง Dashboard ห้ามพิมพ์ช่อง `B11` ตรงๆ ในสูตร** ใช้ `R('key')` ของ `dashSpec_` → `testDashboardSpec()` จับเคสนี้ให้
   อัปเดตแผงใช้เมนู "สร้างชีต Dashboard ใหม่ (ไม่แตะ Log)" = `rebuildDashboardOnly()`
@@ -43,7 +46,8 @@ Body Composition Tracker ของ CK เอง (ไม่ใช่งาน ศ
 
 ## สถานะ (5 ต.ค. 69)
 
-- deploy **@8 "v10"** — Dashboard เลิก hardcode เลขแถว (key-based spec) + แถวน้ำ 5 แถว + กราฟน้ำ 7 วัน
+- deploy **@9 "v11"** — `setupTracker` ลบข้อมูลไม่ได้อีกแล้ว (แยก chrome/seed ทุกชีต) + `testSetupNonDestructive()`
+- deploy @8 "v10" — Dashboard เลิก hardcode เลขแถว (key-based spec) + แถวน้ำ 5 แถว + กราฟน้ำ 7 วัน
 - deploy @7 "v9" — ชีต Water + แท็บ 💧 น้ำ + ภารกิจ `m9` น้ำครบ (auto) / `m8` ปิด window 18:00
 - CK เริ่ม **IF 18/6 แบบ 12:00–18:00** (เลือกรูปแบบที่ไม่ตัดมื้อเย็นกับลูก)
 - บันทึกผลชั่ง 4 ต.ค. + อัปเดต baseline ในชีตแล้ว
@@ -54,9 +58,10 @@ Body Composition Tracker ของ CK เอง (ไม่ใช่งาน ศ
 ## ของค้าง
 
 - กด `m8` จริงเย็นวันไหนก็ได้ เพื่อพิสูจน์สาขาหลัง 18:00 ของ `testCoinLogic` (สาขาก่อน 18:00 ผ่านแล้ว)
+- Run `testSetupNonDestructive()` ใน editor 1 ครั้ง (ยังไม่เคยรันบน GAS จริง — guard เทสด้วย node มาแล้ว 5/5)
 
 ปิดแล้ว 5 ต.ค. 69: `rebuildDashboardOnly()` รันจริง — **Log 27 แถวไม่ถูกแตะ** (21 เดิม + 6 ที่คีย์หลัง 7 ส.ค.)
 `testDashboardSpec()` รันบน GAS จริงผ่าน — 23 แถวมีคีย์, progress แถว 11, น้ำวันนี้แถว 25 ตรงกับที่ซิมด้วย node
 
-⚠️ **Log มี 27 แถวแล้ว แต่ `hist` ใน `buildLog_` ยังมี 21 จุด (ถึง 7 ส.ค. 69)** — ใครรัน `setupTracker` วันนี้จะหาย 6 แถว
-ถ้าจะให้ปลอดภัยจริง ต้องเลิกฝัง `hist` ไว้ในโค้ด หรือทำให้ `setupTracker` ไม่แตะ Log ที่มีข้อมูลอยู่แล้ว
+ปิดแล้ว 5 ต.ค. 69 (v11): `hist` ย้ายเข้า `seedLog_` ที่ลงเฉพาะชีตว่าง — `setupTracker` รันกี่ครั้งก็ไม่ลบข้อมูล
+ไม่ต้องตามอัปเดต `hist` ให้ทันชีตอีกแล้ว (ของจริงอยู่ในชีต ไม่ใช่ในโค้ด)

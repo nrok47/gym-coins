@@ -571,11 +571,65 @@ function eq2_(a, b) {
   if (a !== b) throw new Error('ยอด coin ไม่กลับที่เดิม: ' + a + ' ≠ ' + b);
 }
 
+/** เทสว่า setupTracker ลบข้อมูลไม่ได้อีกแล้ว — ทำบนชีตชั่วคราว ไม่แตะชีตจริง
+ *  Run ตัวนี้ใน editor · ชีต __test_* ถูกลบคืนทุกกรณีใน finally
+ *
+ *  เทสทั้งสองสาขาที่รู้ว่าต้องเจอ: ชีตว่าง -> seed ลง · ชีตมีข้อมูล -> seed ต้องเงียบ
+ *  (เคสที่สองคือบั๊กที่ทำผลชั่งหลัง 7 ส.ค. 69 หายไป 6 แถว) */
+function testSetupNonDestructive() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const active = ss.getActiveSheet();
+  const sh = ss.insertSheet('__test_log_' + Date.now());
+  const eq = (a, b, msg) => { if (a !== b) throw new Error(msg + ' — ได้ ' + a + ' ควรเป็น ' + b); };
+
+  try {
+    // ── สาขา 1: ชีตว่าง -> ต้องลงข้อมูลตั้งต้น ──
+    eq(sheetDataRows_(sh), 0, 'ชีตใหม่ไม่ควรมีแถวข้อมูล');
+    buildLogChrome_(sh);
+    eq(sheetDataRows_(sh), 0, 'buildLogChrome_ ไม่ควรเขียนค่าลงคอลัมน์ A');
+    eq(seedLog_(sh), 21, 'ชีตว่างแต่ไม่ได้ลงข้อมูลตั้งต้น 21 จุด');
+    eq(sheetDataRows_(sh), 21, 'นับแถวหลัง seed ไม่ตรง');
+
+    // ── สาขา 2: มีข้อมูลแล้ว -> seed ต้องไม่เขียนอะไรเลย ──
+    eq(seedLog_(sh), 0, 'ชีตมีข้อมูลอยู่แล้วแต่ seed ยังเขียนทับ');
+    eq(sheetDataRows_(sh), 21, 'seed รอบสองทำจำนวนแถวเปลี่ยน');
+
+    // ── สาขา 3: แถวที่ผู้ใช้เพิ่มเองหลังข้อมูลตั้งต้น ต้องรอดจากการซ่อมโครง ──
+    const mine = new Date(2026, 9, 5);
+    sh.getRange(23, 1, 1, 6).setValues([[mine, 53.77, 2.87, 24.6, 51.7, 12]]);
+    sh.getRange(23, 15).setValue(75.1);
+    eq(sheetDataRows_(sh), 22, 'เพิ่มแถวเองแล้วนับไม่ขึ้น');
+
+    buildLogChrome_(sh);
+    eq(seedLog_(sh), 0, 'ซ่อมโครงแล้ว seed กลับมาเขียนทับ');
+    eq(sheetDataRows_(sh), 22, 'ซ่อมโครงแล้วจำนวนแถวหาย');
+    eq(sh.getRange(23, 2).getValue(), 53.77, 'ค่ากล้ามเนื้อที่กรอกเองหาย');
+    eq(sh.getRange(23, 15).getValue(), 75.1, 'น้ำหนักที่กรอกเองหาย');
+    SpreadsheetApp.flush();
+    eq(sh.getRange(23, 8).getValue(), 75.1, 'สูตรคอลัมน์ H ไม่ทำงานหลังซ่อมโครง');
+
+    // ── สาขา 4: dataSheet_ ต้องไม่ล้างค่า (ต่างจาก resetSheet_) ──
+    const before = sh.getRange(23, 2).getValue();
+    dataSheet_(ss, sh.getName());
+    eq(sh.getRange(23, 2).getValue(), before, 'dataSheet_ ล้างค่าในตาราง');
+
+    // ── สาขา 5: เคสที่รู้ว่าต้องพัง — resetSheet_ ยังต้องล้างอยู่ (ใช้กับ Dashboard) ──
+    resetSheet_(ss, sh.getName());
+    eq(sheetDataRows_(sh), 0, 'resetSheet_ ไม่ล้างแล้ว แปลว่าเทสนี้วัดอะไรไม่ได้');
+
+    Logger.log('ผ่านหมด — ชีตว่าง seed 21 จุด / ชีตมีข้อมูล seed = 0 / ' +
+      'ซ่อมโครงแล้วแถวที่กรอกเองยังอยู่ครบ');
+  } finally {
+    ss.deleteSheet(sh);
+    ss.setActiveSheet(active);
+  }
+}
+
 /* ═══════════════════════════ ติดตั้งชีต ═══════════════════════════ */
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('📊 Body Tracker')
-    .addItem('ติดตั้ง / รีเซ็ตชีต', 'setupTracker')
+    .addItem('ติดตั้ง / ซ่อมโครงชีต (ไม่ลบข้อมูล)', 'setupTracker')
     .addItem('บันทึกวันนี้ (ในชีต)', 'gotoNextRow')
     .addItem('สร้างชีต Dashboard ใหม่ (ไม่แตะ Log)', 'rebuildDashboardOnly')
     .addItem('อัปเดต baseline ในชีต Dashboard', 'refreshBaselineInSheet')
@@ -586,26 +640,61 @@ function setupTracker() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.setSpreadsheetTimeZone('Asia/Bangkok');
 
-  const log = resetSheet_(ss, LOG);
-  const drinks = resetSheet_(ss, DRINKS);
-  const clinic = resetSheet_(ss, CLINIC);
-  const blood = resetSheet_(ss, BLOOD);
-  const dash = resetSheet_(ss, DASH);
+  // ชีตที่มีข้อมูลของตัวเอง — ไม่ล้าง เขียนทับแค่โครง (หัวตาราง/สูตร/รูปแบบ)
+  const log    = dataSheet_(ss, LOG);
+  const drinks = dataSheet_(ss, DRINKS);
+  const clinic = dataSheet_(ss, CLINIC);
+  const blood  = dataSheet_(ss, BLOOD);
+  // Dashboard ไม่มีข้อมูลของตัวเอง มีแต่สูตรชี้ไปชีตอื่น — ล้างได้
+  const dash   = resetSheet_(ss, DASH);
 
-  buildDrinks_(drinks);
-  buildLog_(log);
+  buildDrinksChrome_(drinks);  const sd = seedDrinks_(drinks);
+  buildLogChrome_(log);        const sl = seedLog_(log);
   waterSheet_();   // สร้างถ้ายังไม่มี — ไม่ล้าง ประวัติน้ำต้องอยู่ยาวเหมือน Coins
-  buildClinic_(clinic);
-  buildBlood_(blood);
+  buildClinicChrome_(clinic);  const sc = seedClinic_(clinic);
+  buildBloodChrome_(blood);    const sb = seedBlood_(blood);
   buildDashboard_(dash, log);
   coinSheet_();   // สร้างถ้ายังไม่มี — ไม่ล้าง ประวัติ coin ต้องอยู่ยาว
 
-  ss.getSheets().forEach(s => {
-    if ([LOG, DRINKS, CLINIC, BLOOD, DASH, COINS, WATER].indexOf(s.getName()) === -1) ss.deleteSheet(s);
+  // ชีตแปลกปลอม: ลบได้เฉพาะที่ว่างจริง มีข้อมูลแล้วห้ามแตะ รายงานชื่อกลับไปให้ CK ตัดสิน
+  const keep = [LOG, DRINKS, CLINIC, BLOOD, DASH, COINS, WATER];
+  const left = [];
+  ss.getSheets().forEach(x => {
+    if (keep.indexOf(x.getName()) > -1) return;
+    if (sheetDataRows_(x) === 0 && x.getLastRow() <= 1) ss.deleteSheet(x);
+    else left.push(x.getName());
   });
 
   ss.setActiveSheet(dash);
-  SpreadsheetApp.getUi().alert('ติดตั้งเสร็จ — ถ้าจะใช้หน้าเว็บ ให้ Deploy เป็น Web app อีกที');
+  SpreadsheetApp.getUi().alert(
+    'ติดตั้ง/ซ่อมโครงเสร็จ — ไม่มีข้อมูลไหนถูกลบ\n\n' +
+    'Log ' + sheetDataRows_(log) + ' แถว' + (sl ? ' (ใส่ข้อมูลตั้งต้น ' + sl + ' จุด)' : ' (ของเดิมอยู่ครบ)') + '\n' +
+    'Drinks ' + sheetDataRows_(drinks) + ' แถว' + (sd ? ' (ใส่ตั้งต้น ' + sd + ')' : '') + '\n' +
+    'Clinic ' + sheetDataRows_(clinic) + ' แถว' + (sc ? ' (ใส่ตั้งต้น ' + sc + ')' : '') + '\n' +
+    'Blood ' + sheetDataRows_(blood) + ' แถว' + (sb ? ' (ใส่ตั้งต้น ' + sb + ')' : '') +
+    (left.length ? '\n\nชีตที่ไม่ได้ลบเพราะมีข้อมูล: ' + left.join(', ') : ''));
+}
+
+/** นับแถวข้อมูลจริง (คอลัมน์ A ตั้งแต่แถว 2) — ตัวตัดสินว่าชีตนี้ "ว่าง" หรือไม่ */
+function sheetDataRows_(sh) {
+  const n = Math.max(0, sh.getMaxRows() - 1);
+  if (!n) return 0;
+  return sh.getRange(2, 1, n, 1).getValues().filter(r => r[0] !== '' && r[0] !== null).length;
+}
+
+/** ชีตที่มีข้อมูลของตัวเอง — สร้างถ้ายังไม่มี ถ้ามีแล้ว "ไม่ล้างค่า"
+ *  ล้างแค่ของที่สร้างใหม่ทับได้ไม่เสียหาย: conditional format + chart
+ *  (ไม่ล้าง rule เดิมก่อน จะซ้อนทับกันทุกครั้งที่รัน setupTracker)
+ *
+ *  เหตุผลที่ต้องมีตัวนี้: เดิม setupTracker ใช้ resetSheet_ กับ Log ด้วย → sh.clear()
+ *  แล้ว buildLog_ เขียน hist 21 จุดทับ = ผลชั่งหลัง 7 ส.ค. 69 หายเงียบ
+ *  (5 ต.ค. 69 Log โตเป็น 27 แถว ส่วนต่าง 6 แถวคือของที่จะหาย) */
+function dataSheet_(ss, name) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) return ss.insertSheet(name);
+  sh.getCharts().forEach(c => sh.removeChart(c));
+  sh.clearConditionalFormatRules();
+  return sh;
 }
 
 function resetSheet_(ss, name) {
@@ -642,14 +731,9 @@ function rule_(range, op, val, bg, fc) {
 
 /* ─────────────────────────── ชีต Drinks ─────────────────────────── */
 
-function buildDrinks_(sh) {
+/** โครงชีต Drinks — เรียกซ้ำได้ ไม่แตะค่าในตาราง */
+function buildDrinksChrome_(sh) {
   header_(sh, ['วันที่', 'ปริมาณ (ml)', 'ชนิด', 'กับแกล้ม', 'โซเดียมสูง', 'บันทึก'], '#6a1b9a');
-
-  // ข้อมูลที่จำได้ — ก่อน 6 พ.ค. 69 ไม่ได้ดื่ม จึงไม่มีแถว
-  sh.getRange(2, 1, 2, 6).setValues([
-    [new Date(2026, 7, 3), 1000, 'เบียร์', 'ไม่มี', '', 'กระป๋องยาว 2'],
-    [new Date(2026, 7, 6), 500,  'เบียร์', 'ไม่มี', '', 'กระป๋องยาว 1']
-  ]);
 
   sh.getRange('A2:A' + CFG.L).setNumberFormat('d mmm yy');
   sh.getRange('B2:B' + CFG.L).setNumberFormat('0');
@@ -669,6 +753,21 @@ function buildDrinks_(sh) {
   sh.setColumnWidth(5, 260);
   sh.getRange('A1').setNote('บันทึกทีละครั้งที่ดื่ม ชีต Log จะรวม ml ให้เองตามช่วงระหว่างการชั่ง');
 }
+
+/** ข้อมูลตั้งต้น — ลงให้เฉพาะชีตที่ยังว่าง คืนจำนวนแถวที่ลง (0 = ไม่ได้ลง) */
+function seedDrinks_(sh) {
+  if (sheetDataRows_(sh) > 0) return 0;
+  // ข้อมูลที่จำได้ — ก่อน 6 พ.ค. 69 ไม่ได้ดื่ม จึงไม่มีแถว
+  const seed = [
+    [new Date(2026, 7, 3), 1000, 'เบียร์', 'ไม่มี', '', 'กระป๋องยาว 2'],
+    [new Date(2026, 7, 6), 500,  'เบียร์', 'ไม่มี', '', 'กระป๋องยาว 1']
+  ];
+  sh.getRange(2, 1, seed.length, 6).setValues(seed);
+  return seed.length;
+}
+
+/** ของเดิมที่โค้ดอื่นยังเรียกชื่อนี้ — โครง + ข้อมูลตั้งต้น (ถ้าชีตว่าง) */
+function buildDrinks_(sh) { buildDrinksChrome_(sh); seedDrinks_(sh); }
 
 /* ─────────────────────────── ชีต Water ─────────────────────────── */
 
@@ -700,7 +799,9 @@ function buildWater_(sh) {
  *  สูตร:    G ml | H น้ำหนัก | I BMI | J เฉลี่ย 7 วัน | K Δ | L ไขมันจากเครื่องดื่ม | N เป้า
  */
 
-function buildLog_(sh) {
+/** โครงชีต Log — หัวตาราง สูตร รูปแบบ โน้ต · เรียกซ้ำได้ ไม่แตะค่าที่กรอกไว้
+ *  เขียนทับเฉพาะคอลัมน์ที่เป็น "สูตร" (G H I J K L N) ส่วน A-F, M, O เป็นของผู้ใช้ ไม่แตะ */
+function buildLogChrome_(sh) {
   const L = CFG.L;
 
   header_(sh, [
@@ -709,34 +810,6 @@ function buildLog_(sh) {
     '◆ น้ำหนัก (กก.)', 'BMI', '◆ เฉลี่ย 7 วัน (กก.)', 'Δ เฉลี่ย', 'ไขมันจากเครื่องดื่ม (กก.)',
     'บันทึก', 'เป้า', 'น้ำหนักที่เครื่องแสดง (กก.)'
   ]);
-
-  // ── ข้อมูลจริงจากแอป 21 จุด ──
-  const hist = [
-    [new Date(2026, 1, 15), 52.28, 2.80, 23.1, 52.7, 11, ''],
-    [new Date(2026, 1, 23), 52.76, 2.82, 23.3, 52.5, 11, ''],
-    [new Date(2026, 1, 28), 52.12, 2.79, 23.0, 52.7, 11, ''],
-    [new Date(2026, 2, 10), 52.80, 2.83, 23.2, 52.6, 11, ''],
-    [new Date(2026, 2, 19), 52.34, 2.80, 22.7, 52.9, 11, ''],
-    [new Date(2026, 2, 26), 52.76, 2.82, 22.9, 52.8, 11, ''],
-    [new Date(2026, 3, 2),  52.36, 2.80, 22.4, 53.1, 11, ''],
-    [new Date(2026, 3, 10), 52.56, 2.81, 22.6, 53.0, 11, ''],
-    [new Date(2026, 3, 19), 53.27, 2.85, 23.5, 52.4, 12, 'ช่วงสงกรานต์ — สูงสุดของครึ่งปีแรก'],
-    [new Date(2026, 3, 30), 52.49, 2.81, 22.8, 52.9, 11, 'ฟื้นจากสงกรานต์ได้ภายใน 11 วัน'],
-    [new Date(2026, 4, 13), 52.28, 2.80, 22.5, 53.1, 11, 'หลังจุดที่กลับมาดื่ม (6 พ.ค.)'],
-    [new Date(2026, 4, 30), 52.30, 2.80, 22.2, 53.3, 11, '★ จุดต่ำสุดของปี'],
-    [new Date(2026, 5, 3),  52.47, 2.81, 22.2, 53.3, 11, 'จุดกลับตัว — ขาขึ้นเริ่มจากตรงนี้'],
-    [new Date(2026, 5, 23), 52.45, 2.81, 23.1, 52.6, 12, ''],
-    [new Date(2026, 5, 28), 52.40, 2.80, 22.6, 53.0, 11, ''],
-    [new Date(2026, 6, 1),  52.39, 2.80, 22.5, 53.1, 11, ''],
-    [new Date(2026, 6, 2),  52.48, 2.81, 22.7, 53.0, 12, ''],
-    [new Date(2026, 6, 9),  52.58, 2.81, 23.1, 52.7, 12, ''],
-    [new Date(2026, 6, 14), 52.82, 2.83, 23.4, 52.5, 12, ''],
-    [new Date(2026, 6, 19), 52.96, 2.83, 23.1, 52.7, 12, ''],
-    [new Date(2026, 7, 7),  53.02, 2.84, 24.4, 51.8, 12, 'จุดตั้งต้นรอบกู้ร่าง']
-  ];
-
-  sh.getRange(2, 1, hist.length, 6).setValues(hist.map(r => r.slice(0, 6)));
-  sh.getRange(2, 13, hist.length, 1).setValues(hist.map(r => [r[6]]));
 
   // G: รวม ml จากชีต Drinks ในช่วงระหว่างการชั่งครั้งก่อนกับครั้งนี้
   //    SUMIFS ใช้ ARRAYFORMULA ไม่ได้ จึงเขียนสูตรลงทีละแถวแบบ batch เดียว
@@ -811,16 +884,50 @@ function buildLog_(sh) {
   sh.getRange('J1').setNote('เฉลี่ยน้ำหนักย้อนหลัง 7 วัน — ใช้ตัวนี้ตัดสินทิศทาง ไม่ใช่ค่ารายครั้ง');
 }
 
+/** ข้อมูลตั้งต้น 21 จุด — ลงให้เฉพาะชีตที่ยังว่าง คืนจำนวนแถวที่ลง (0 = ไม่ได้ลง)
+ *
+ *  นี่คือจุดที่เคยทำข้อมูลหาย: เดิม hist อยู่ใน buildLog_ และเขียนทับแถว 2-22 ทุกครั้ง
+ *  คู่กับ sh.clear() ใน resetSheet_ = ผลชั่งหลัง 7 ส.ค. 69 หายหมดโดยไม่มีอะไรฟ้อง
+ *  ตอนนี้ลงเฉพาะตอนติดตั้งครั้งแรก และไม่ต้องมาตามอัปเดต hist ให้ทันชีตอีก */
+function seedLog_(sh) {
+  if (sheetDataRows_(sh) > 0) return 0;
+  // ── ข้อมูลจริงจากแอป 21 จุด ──
+  const hist = [
+    [new Date(2026, 1, 15), 52.28, 2.80, 23.1, 52.7, 11, ''],
+    [new Date(2026, 1, 23), 52.76, 2.82, 23.3, 52.5, 11, ''],
+    [new Date(2026, 1, 28), 52.12, 2.79, 23.0, 52.7, 11, ''],
+    [new Date(2026, 2, 10), 52.80, 2.83, 23.2, 52.6, 11, ''],
+    [new Date(2026, 2, 19), 52.34, 2.80, 22.7, 52.9, 11, ''],
+    [new Date(2026, 2, 26), 52.76, 2.82, 22.9, 52.8, 11, ''],
+    [new Date(2026, 3, 2),  52.36, 2.80, 22.4, 53.1, 11, ''],
+    [new Date(2026, 3, 10), 52.56, 2.81, 22.6, 53.0, 11, ''],
+    [new Date(2026, 3, 19), 53.27, 2.85, 23.5, 52.4, 12, 'ช่วงสงกรานต์ — สูงสุดของครึ่งปีแรก'],
+    [new Date(2026, 3, 30), 52.49, 2.81, 22.8, 52.9, 11, 'ฟื้นจากสงกรานต์ได้ภายใน 11 วัน'],
+    [new Date(2026, 4, 13), 52.28, 2.80, 22.5, 53.1, 11, 'หลังจุดที่กลับมาดื่ม (6 พ.ค.)'],
+    [new Date(2026, 4, 30), 52.30, 2.80, 22.2, 53.3, 11, '★ จุดต่ำสุดของปี'],
+    [new Date(2026, 5, 3),  52.47, 2.81, 22.2, 53.3, 11, 'จุดกลับตัว — ขาขึ้นเริ่มจากตรงนี้'],
+    [new Date(2026, 5, 23), 52.45, 2.81, 23.1, 52.6, 12, ''],
+    [new Date(2026, 5, 28), 52.40, 2.80, 22.6, 53.0, 11, ''],
+    [new Date(2026, 6, 1),  52.39, 2.80, 22.5, 53.1, 11, ''],
+    [new Date(2026, 6, 2),  52.48, 2.81, 22.7, 53.0, 12, ''],
+    [new Date(2026, 6, 9),  52.58, 2.81, 23.1, 52.7, 12, ''],
+    [new Date(2026, 6, 14), 52.82, 2.83, 23.4, 52.5, 12, ''],
+    [new Date(2026, 6, 19), 52.96, 2.83, 23.1, 52.7, 12, ''],
+    [new Date(2026, 7, 7),  53.02, 2.84, 24.4, 51.8, 12, 'จุดตั้งต้นรอบกู้ร่าง']
+  ];
+
+  sh.getRange(2, 1, hist.length, 6).setValues(hist.map(r => r.slice(0, 6)));
+  sh.getRange(2, 13, hist.length, 1).setValues(hist.map(r => [r[6]]));
+  return hist.length;
+}
+
+/** ของเดิมที่โค้ดอื่นยังเรียกชื่อนี้ — โครง + ข้อมูลตั้งต้น (ถ้าชีตว่าง) */
+function buildLog_(sh) { buildLogChrome_(sh); seedLog_(sh); }
+
 /* ─────────────────────────── ชีต Clinic ─────────────────────────── */
 
-function buildClinic_(sh) {
+function buildClinicChrome_(sh) {
   header_(sh, ['วันที่', 'น้ำหนัก (กก.)', 'ไขมัน (%)', 'กล้ามเนื้อ (กก.)', 'ไขมันช่องท้อง', 'BMR', 'สถานที่', 'บันทึก'], '#00695c');
-
-  sh.getRange(2, 1, 3, 8).setValues([
-    [new Date(2026, 0, 15), 69.95, 17.7, 54.6, 9,    '',   '', 'ร่างทอง — ค่าน่าจะคลาดเคลื่อนจาก hydration ปลาย cut'],
-    [new Date(2026, 2, 11), 71.9,  '',   53.1, 10.5, '',   'คลินิก ศอ.10', ''],
-    [new Date(2026, 4, 6),  72.24, 21.2, 53.0, '',   1559, 'คลินิก ศอ.10', 'ดีที่สุดของปีตามเครื่องคลินิก']
-  ]);
 
   sh.getRange('A2:A100').setNumberFormat('d mmm yy');
   sh.getRange('B2:F100').setNumberFormat('0.00');
@@ -831,16 +938,23 @@ function buildClinic_(sh) {
     'แต่ห้ามเอาไปต่อเป็นเส้นเดียวกับชีต Log');
 }
 
+function seedClinic_(sh) {
+  if (sheetDataRows_(sh) > 0) return 0;
+  const seed = [
+    [new Date(2026, 0, 15), 69.95, 17.7, 54.6, 9,    '',   '', 'ร่างทอง — ค่าน่าจะคลาดเคลื่อนจาก hydration ปลาย cut'],
+    [new Date(2026, 2, 11), 71.9,  '',   53.1, 10.5, '',   'คลินิก ศอ.10', ''],
+    [new Date(2026, 4, 6),  72.24, 21.2, 53.0, '',   1559, 'คลินิก ศอ.10', 'ดีที่สุดของปีตามเครื่องคลินิก']
+  ];
+  sh.getRange(2, 1, seed.length, 8).setValues(seed);
+  return seed.length;
+}
+
+function buildClinic_(sh) { buildClinicChrome_(sh); seedClinic_(sh); }
+
 /* ─────────────────────────── ชีต Blood ─────────────────────────── */
 
-function buildBlood_(sh) {
+function buildBloodChrome_(sh) {
   header_(sh, ['วันที่', 'TG', 'LDL', 'HDL', 'CHO', 'SBP', 'DBP', 'สถานที่ตรวจ', 'บันทึก'], '#4e342e');
-
-  sh.getRange(2, 1, 3, 9).setValues([
-    [new Date(2024, 10, 1), 287, '',  '', '',  '',  '',  '', 'จุดเริ่มต้น — TG วิกฤต'],
-    [new Date(2025, 6, 1),  '',  178, '', '',  '',  '',  '', 'LDL สูงสุด'],
-    [new Date(2026, 4, 6),  162, 162, 34, 245, 125, 73, 'Lifestyle Medicine Clinic ศอ.10', 'TG ลดจาก 287 ระหว่างช่วงงดดื่ม']
-  ]);
 
   sh.getRange('A2:A200').setNumberFormat('d mmm yy');
   sh.getRange('B2:G200').setNumberFormat('0');
@@ -859,6 +973,19 @@ function buildBlood_(sh) {
   sh.setColumnWidth(9, 280);
   sh.getRange('A1').setNote('สีเป็นเกณฑ์อ้างอิงทั่วไปเพื่อดูเทรนด์ ไม่ใช่การแปลผล ให้ยึดตามคลินิก');
 }
+
+function seedBlood_(sh) {
+  if (sheetDataRows_(sh) > 0) return 0;
+  const seed = [
+    [new Date(2024, 10, 1), 287, '',  '', '',  '',  '',  '', 'จุดเริ่มต้น — TG วิกฤต'],
+    [new Date(2025, 6, 1),  '',  178, '', '',  '',  '',  '', 'LDL สูงสุด'],
+    [new Date(2026, 4, 6),  162, 162, 34, 245, 125, 73, 'Lifestyle Medicine Clinic ศอ.10', 'TG ลดจาก 287 ระหว่างช่วงงดดื่ม']
+  ];
+  sh.getRange(2, 1, seed.length, 9).setValues(seed);
+  return seed.length;
+}
+
+function buildBlood_(sh) { buildBloodChrome_(sh); seedBlood_(sh); }
 
 /* ─────────────────────────── Dashboard (ในชีต) ─────────────────────────── */
 
