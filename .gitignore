@@ -1,0 +1,16 @@
+# clasp credential — ห้ามเข้า git เด็ดขาด
+.clasprc.json
+**/.clasprc.json
+
+# node
+node_modules/
+npm-debug.log*
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ของชั่วคราว
+*.bak
+*.tmp

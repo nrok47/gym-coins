@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root{
+      --bg:#f4f6f8; --card:#fff; --ink:#1c2226; --muted:#6b7780; --line:#e3e8ec;
+      --green:#1b5e20; --red:#b71c1c; --amber:#e65100; --purple:#6a1b9a; --blue:#0d47a1;
+      --gold:#f5b301;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{margin:0;background:var(--bg);color:var(--ink);
+      font-family:-apple-system,"Sarabun","Noto Sans Thai",system-ui,sans-serif;
+      font-size:16px;padding-bottom:88px}
+    header{background:#fff;padding:14px 16px;border-bottom:1px solid var(--line);
+      position:sticky;top:0;z-index:10}
+    header h1{margin:0;font-size:17px;font-weight:700}
+    header span{font-size:13px;color:var(--muted)}
+    main{padding:14px}
+    .card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;
+      box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .hero{text-align:center;padding:22px 16px}
+    .hero .num{font-size:46px;font-weight:800;line-height:1;color:var(--green)}
+    .hero .unit{font-size:17px;font-weight:600;color:var(--muted)}
+    .hero .lbl{font-size:13px;color:var(--muted);margin-bottom:8px;letter-spacing:.4px}
+    .hero .sub{font-size:13px;color:var(--muted);margin-top:10px}
+    .bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:14px}
+    .bar>i{display:block;height:100%;background:var(--green);border-radius:99px;transition:width .5s}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .stat{background:var(--card);border-radius:12px;padding:13px;
+      box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .stat b{display:block;font-size:22px;font-weight:700;margin-top:3px}
+    .stat small{font-size:12px;color:var(--muted)}
+    .alert{border-radius:12px;padding:13px 15px;font-size:14px;font-weight:600;margin-bottom:12px}
+    .alert.green{background:#e8f5e9;color:var(--green)}
+    .alert.yellow{background:#fff8e1;color:var(--amber)}
+    .alert.red{background:#ffebee;color:var(--red)}
+    .alert.none{background:#eceff1;color:var(--muted);font-weight:500}
+    h2{font-size:13px;color:var(--muted);margin:20px 0 9px;letter-spacing:.5px;font-weight:700}
+    label{display:block;font-size:13px;color:var(--muted);margin:12px 0 5px;font-weight:600}
+    input,select,textarea{width:100%;padding:12px;font-size:17px;border:1px solid var(--line);
+      border-radius:10px;background:#fbfcfd;font-family:inherit;color:var(--ink)}
+    input:focus,select:focus{outline:none;border-color:var(--blue);background:#fff}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    button{width:100%;padding:15px;font-size:16px;font-weight:700;border:0;border-radius:11px;
+      background:var(--green);color:#fff;margin-top:18px;font-family:inherit}
+    button:active{opacity:.85}
+    button.purple{background:var(--purple)}
+    button:disabled{background:#b0bec5}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:5px}
+    .chip{flex:1;min-width:72px;padding:13px 8px;text-align:center;border:1.5px solid var(--line);
+      border-radius:10px;font-size:15px;font-weight:600;background:#fbfcfd}
+    .chip.on{border-color:var(--purple);background:#f3e5f5;color:var(--purple)}
+    .toggle{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:15px}
+    .toggle input{width:22px;height:22px;flex:0 0 auto}
+    nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;
+      border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+    nav a{flex:1;text-align:center;padding:11px 4px 13px;font-size:11px;color:var(--muted);
+      text-decoration:none;font-weight:600}
+    nav a.on{color:var(--green)}
+    nav a i{display:block;font-size:21px;font-style:normal;margin-bottom:2px}
+    nav a{padding-left:2px;padding-right:2px}
+    .spark{display:flex;align-items:flex-end;gap:3px;height:56px;margin-top:14px}
+    .spark div{flex:1;background:#c8e6c9;border-radius:2px 2px 0 0;min-height:3px}
+    .spark div.last{background:var(--green)}
+    .page{display:none}.page.on{display:block}
+    .note{font-size:12px;color:var(--muted);line-height:1.6;margin-top:10px}
+    .load{text-align:center;padding:50px 20px;color:var(--muted)}
+    .toast{position:fixed;left:16px;right:16px;bottom:80px;background:var(--ink);color:#fff;
+      padding:14px;border-radius:11px;text-align:center;font-size:14px;z-index:99;display:none}
+
+    /* coin RPG */
+    .coin-hero{text-align:center}
+    .coin-hero .num{font-size:46px;font-weight:800;color:var(--gold);line-height:1}
+    .streak{display:inline-block;background:#fff3e0;color:var(--amber);font-size:12px;
+      font-weight:700;padding:4px 12px;border-radius:99px;margin-top:8px}
+    .mission{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:12px;
+      padding:12px 14px;margin-bottom:9px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .mission .ic{font-size:26px;width:34px;text-align:center}
+    .mission .info{flex:1}
+    .mission .nm{font-size:15px;font-weight:700}
+    .mission .ds{font-size:12px;color:var(--muted);margin-top:2px}
+    .mission .cn{background:var(--gold);color:#3e2b00;font-weight:700;font-size:13px;
+      padding:4px 10px;border-radius:99px;white-space:nowrap}
+    .mission.done,.mission.lock{opacity:.5}
+    .mission.done .nm{text-decoration:line-through}
+    .mission.done .cn{background:#cfd8dc;color:#607d8b}
+    .rw{background:var(--card);border-radius:12px;padding:13px 10px;text-align:center;
+      box-shadow:0 1px 3px rgba(0,0,0,.06);border:1.5px solid transparent}
+    .rw.ok{border-color:var(--green)}
+    .rw.no{opacity:.5}
+    .rw .ic{font-size:26px}
+    .rw .nm{font-size:14px;font-weight:700;margin-top:4px}
+    .rw .ct{font-size:13px;color:var(--amber);font-weight:700;margin-top:3px}
+    .rw .st{font-size:11px;color:var(--muted);margin-top:3px}
+    .hist{display:flex;justify-content:space-between;font-size:13px;padding:7px 0;
+      border-bottom:1px solid var(--line)}
+    .hist:last-child{border:0}
+    .hist b{color:var(--green)}
+    .hist b.minus{color:var(--red)}
+
+    /* น้ำ */
+    .wbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+    .wbtn{padding:20px 10px;text-align:center;border:1.5px solid #b3e5fc;border-radius:12px;
+      background:#e1f5fe;color:#01579b;font-weight:700;font-size:19px;line-height:1.3}
+    .wbtn small{display:block;font-size:12px;font-weight:600;opacity:.75;margin-top:3px}
+    .wbtn:active{opacity:.7}
+    .wbar{height:14px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:14px}
+    .wbar>i{display:block;height:100%;background:#0288d1;border-radius:99px;transition:width .4s}
+    .wrow{display:flex;justify-content:space-between;font-size:14px;padding:7px 0;
+      border-bottom:1px solid var(--line)}
+    .wrow:last-child{border:0}
+    .wrow span.t{color:var(--muted);font-variant-numeric:tabular-nums}
+    .w7{display:flex;align-items:flex-end;gap:4px;height:60px;margin-top:12px}
+    .w7 div{flex:1;background:#b3e5fc;border-radius:3px 3px 0 0;min-height:3px;position:relative}
+    .w7 div.hit{background:#0288d1}
+    .w7 div.last{outline:2px solid #01579b;outline-offset:1px}
+    nav a i{font-size:19px}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Body Tracker</h1>
+  <span id="hdr">กำลังโหลด…</span>
+</header>
+
+<main>
+
+  <!-- ══════════ Dashboard ══════════ -->
+  <section id="p-dash" class="page on">
+    <div id="dashBody" class="load">กำลังโหลดข้อมูล…</div>
+  </section>
+
+  <!-- ══════════ บันทึกการชั่ง ══════════ -->
+  <section id="p-weigh" class="page">
+    <div class="card">
+      <h2 style="margin-top:0">บันทึกผลชั่ง</h2>
+      <label>วันที่</label>
+      <input type="date" id="w-date">
+
+      <label>น้ำหนัก (กก.) — ตัวเลขที่ตาชั่งขึ้น</label>
+      <input type="number" step="0.01" inputmode="decimal" id="w-kg" placeholder="75.10">
+
+      <div class="row">
+        <div><label>กล้ามเนื้อ (กก.)</label>
+          <input type="number" step="0.01" inputmode="decimal" id="w-muscle" placeholder="53.77"></div>
+        <div><label>กระดูก (กก.)</label>
+          <input type="number" step="0.01" inputmode="decimal" id="w-bone" placeholder="2.84"></div>
+      </div>
+      <div class="row">
+        <div><label>ไขมัน (%)</label>
+          <input type="number" step="0.1" inputmode="decimal" id="w-fat" placeholder="24.6"></div>
+        <div><label>น้ำ (%)</label>
+          <input type="number" step="0.1" inputmode="decimal" id="w-water" placeholder="51.7"></div>
+      </div>
+      <label>ไขมันช่องท้อง</label>
+      <input type="number" step="1" inputmode="numeric" id="w-vf" placeholder="12">
+
+      <label>บันทึก (ไม่บังคับ)</label>
+      <input type="text" id="w-note" placeholder="เช่น นอนน้อย, หลังไปราชการ">
+
+      <button id="w-save" onclick="saveWeigh()">บันทึกผลชั่ง</button>
+      <p class="note">
+        กรอกน้ำหนักตามที่ตาชั่งขึ้นตรงๆ ส่วน BMI และเส้นเฉลี่ย 7 วัน ระบบคำนวณให้<br>
+        ถ้าเว้นช่องน้ำหนักไว้ ระบบจะคำนวณย้อนจาก กล้ามเนื้อ+กระดูก+ไขมัน% แทน (แม่นน้อยกว่า)<br>ชั่งทุกวันเวลาเดิม (ตื่นนอน หลังเข้าห้องน้ำ) เส้นเฉลี่ยถึงจะเชื่อถือได้<br>
+        ไขมัน% กับ น้ำ% เก็บไว้เป็นค่าอ้างอิง ไม่ได้ใช้ตัดสินความคืบหน้า
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════ บันทึกการดื่ม ══════════ -->
+  <section id="p-drink" class="page">
+    <div class="card">
+      <h2 style="margin-top:0">บันทึกการดื่ม</h2>
+      <label>วันที่</label>
+      <input type="date" id="d-date">
+
+      <label>ปริมาณ</label>
+      <div class="chips" id="mlChips">
+        <div class="chip" data-ml="330">330<br><small>สั้น</small></div>
+        <div class="chip" data-ml="500">500<br><small>ยาว</small></div>
+        <div class="chip" data-ml="630">630<br><small>ขวด</small></div>
+        <div class="chip" data-ml="">อื่นๆ<br><small>เหล้า/ไวน์</small></div>
+      </div>
+      <label>หรือระบุเอง (ml)</label>
+      <input type="number" step="10" inputmode="numeric" id="d-ml" placeholder="500">
+
+      <label>ชนิด</label>
+      <select id="d-type">
+        <option>เบียร์</option>
+        <option>ไวน์</option>
+        <option>เหล้า</option>
+      </select>
+
+      <label>กับแกล้ม</label>
+      <select id="d-snack">
+        <option>ไม่มี</option>
+        <option>ถั่ว/นัท</option>
+        <option>ปิ้งย่าง</option>
+        <option>ของทอด</option>
+        <option>มื้อเต็ม</option>
+        <option>อื่นๆ</option>
+      </select>
+
+      <div class="toggle">
+        <input type="checkbox" id="d-sodium">
+        <span>โซเดียมสูง (ถั่วเค็ม, ของหมักดอง)</span>
+      </div>
+
+      <label>บันทึก (ไม่บังคับ)</label>
+      <input type="text" id="d-note" placeholder="เช่น เลี้ยงส่งที่ทำงาน">
+
+      <button class="purple" id="d-save" onclick="saveDrink()">บันทึกการดื่ม</button>
+      <p class="note">
+        โซเดียมสูงทำให้กักน้ำ น้ำหนักวันรุ่งขึ้นเด้ง 0.5–1 กก. ได้โดยไม่ใช่ไขมัน<br>
+        ติ๊กไว้จะได้แยกออกตอนอ่านผล ไม่ตกใจผิดจุด
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════ น้ำเปล่า ══════════ -->
+  <section id="p-water" class="page">
+    <div id="waterBody" class="load">กำลังโหลด…</div>
+  </section>
+
+  <!-- ══════════ ภารกิจ / coin ══════════ -->
+  <section id="p-coin" class="page">
+    <div id="coinBody" class="load">กำลังโหลด…</div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<nav>
+  <a href="#" class="on" data-p="dash" onclick="go('dash',event)"><i>◆</i>สรุป</a>
+  <a href="#" data-p="coin" onclick="go('coin',event)"><i>⚔</i>ภารกิจ</a>
+  <a href="#" data-p="weigh" onclick="go('weigh',event)"><i>⚖</i>ชั่ง</a>
+  <a href="#" data-p="water" onclick="go('water',event)"><i>💧</i>น้ำ</a>
+  <a href="#" data-p="drink" onclick="go('drink',event)"><i>🍺</i>ดื่ม</a>
+</nav>
+
+<script>
+  var D = null;
+
+  function today(){
+    var t = new Date(), z = n => (n<10?'0':'')+n;
+    return t.getFullYear()+'-'+z(t.getMonth()+1)+'-'+z(t.getDate());
+  }
+  document.getElementById('w-date').value = today();
+  document.getElementById('d-date').value = today();
+
+  function go(p, e){
+    if(e) e.preventDefault();
+    ['dash','coin','weigh','water','drink'].forEach(function(k){
+      document.getElementById('p-'+k).classList.toggle('on', k===p);
+    });
+    document.querySelectorAll('nav a').forEach(function(a){
+      a.classList.toggle('on', a.dataset.p===p);
+    });
+    window.scrollTo(0,0);
+  }
+
+  function toast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.style.display='block';
+    setTimeout(function(){ t.style.display='none'; }, 2600);
+  }
+
+  // ปุ่มลัดปริมาณเบียร์
+  document.querySelectorAll('#mlChips .chip').forEach(function(c){
+    c.addEventListener('click', function(){
+      document.querySelectorAll('#mlChips .chip').forEach(function(x){x.classList.remove('on');});
+      c.classList.add('on');
+      document.getElementById('d-ml').value = c.dataset.ml;
+      if(!c.dataset.ml) document.getElementById('d-ml').focus();   // อื่นๆ = พิมพ์ ml เอง
+    });
+  });
+
+  function render(d){
+    D = d;
+    document.getElementById('hdr').textContent = 'ชั่งล่าสุด ' + d.lastDate;
+
+    var pct = Math.round(d.progress*100);
+    var a = d.alert || {level:'none', msg:'-'};
+    var rate = d.rate===null ? '—' : (d.rate>0?'+':'') + d.rate.toFixed(2);
+    var rateColor = d.rate===null ? 'var(--muted)' : (d.rate<0 ? 'var(--green)' : 'var(--red)');
+
+    // sparkline จากน้ำหนักรายครั้ง 15 จุดล่าสุด
+    var ws = d.series.map(function(s){return s.w;});
+    var lo = Math.min.apply(null, ws), hi = Math.max.apply(null, ws);
+    var span = (hi-lo) || 1;
+    var spark = d.series.map(function(s,i){
+      var h = 8 + 92*((s.w-lo)/span);
+      return '<div class="'+(i===d.series.length-1?'last':'')+'" style="height:'+h+'%"></div>';
+    }).join('');
+
+    document.getElementById('dashBody').innerHTML =
+      '<div class="alert '+a.level+'">'+
+        (a.level==='red'?'🔴 ':a.level==='yellow'?'🟡 ':a.level==='green'?'🟢 ':'')+a.msg+
+      '</div>'+
+
+      '<div class="card hero">'+
+        '<div class="lbl">เฉลี่ย 7 วันล่าสุด</div>'+
+        '<div><span class="num">'+(d.ma3!==null?d.ma3.toFixed(2):'—')+'</span> '+
+          '<span class="unit">กก.</span></div>'+
+        '<div class="sub">ชั่งครั้งล่าสุด '+(d.lastWeight?d.lastWeight.toFixed(2):'—')+
+          ' กก. · BMI '+(d.bmi||'—')+'</div>'+
+        '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
+        '<div class="sub">คืบหน้า '+pct+'% ของทาง '+d.cfg.target+' กก.</div>'+
+        (d.sparse ? '<div class="sub" style="color:var(--amber)">⚠ 14 วันล่าสุดชั่ง '+
+          d.weighDays14+' วัน — ต้อง 5 วันขึ้นไป เส้นเฉลี่ยถึงจะเชื่อได้</div>' : '')+
+        '<div class="spark">'+spark+'</div>'+
+      '</div>'+
+
+      '<div class="grid">'+
+        '<div class="stat"><small>เหลือถึงเป้าแรก '+d.cfg.milestone+'</small>'+
+          '<b>'+(d.toMilestone!==null?d.toMilestone.toFixed(2)+' กก.':'—')+'</b></div>'+
+        '<div class="stat"><small>เหลือถึงเป้าปลาย '+d.cfg.target+'</small>'+
+          '<b>'+(d.toTarget!==null?d.toTarget.toFixed(2)+' กก.':'—')+'</b></div>'+
+        '<div class="stat"><small>อัตราเปลี่ยน กก./สัปดาห์</small>'+
+          '<b style="color:'+rateColor+'">'+rate+'</b></div>'+
+        '<div class="stat"><small>คาดถึงเป้าแรก</small>'+
+          '<b>'+(d.weeksToMilestone?d.weeksToMilestone+' สัปดาห์':'—')+'</b></div>'+
+        '<div class="stat"><small>ไขมันช่องท้อง (เป้า '+d.cfg.vfTarget+')</small>'+
+          '<b style="color:'+(d.vf>d.cfg.vfTarget?'var(--red)':'var(--green)')+'">'+
+          (d.vf||'—')+'</b></div>'+
+        '<div class="stat"><small>เครื่องดื่ม 7 วันล่าสุด</small>'+
+          '<b style="color:var(--purple)">'+d.ml7+' ml</b></div>'+
+        '<div class="stat" onclick="go(\'water\')"><small>น้ำวันนี้ (เป้า '+
+          (d.waterTarget/1000).toFixed(1)+' ล.)</small>'+
+          '<b style="color:'+(d.waterToday>=d.waterTarget?'var(--green)':'#0288d1')+'">'+
+          (d.waterToday/1000).toFixed(2)+' ล.</b></div>'+
+      '</div>'+
+
+      '<div class="card" style="margin-top:12px">'+
+        '<h2 style="margin-top:0">เครื่องดื่ม 30 วันล่าสุด</h2>'+
+        '<div style="font-size:15px;line-height:1.9">'+
+          'ปริมาณรวม <b>'+d.ml30+' ml</b><br>'+
+          'คิดเป็น <b>'+d.kcal30+' kcal</b> '+
+          '≈ ไขมัน <b>'+d.fatFromDrink30+' กก.</b>'+
+        '</div>'+
+        '<p class="note">kcal คิดตามชนิด (เบียร์ 0.43 / ไวน์ 0.85 / เหล้า 2.3 kcal ต่อ ml) '+
+        'นับเฉพาะตัวเครื่องดื่ม ไม่รวมกับแกล้ม '+
+        'ถ้าน้ำหนักขึ้นมากกว่าที่ตัวเลขนี้อธิบายได้ แปลว่าส่วนเกินมาจากอาหาร ไม่ใช่เครื่องดื่ม</p>'+
+      '</div>';
+  }
+
+  // ══════════ น้ำเปล่า ══════════
+  var W = null;
+
+  function renderWater(w){
+    W = w;
+    var pct = Math.round(w.pct*100);
+    var hiMl = Math.max.apply(null, w.last7.map(function(d){return d.ml;})) || w.target;
+
+    var bars = w.last7.map(function(d,i){
+      var h = 6 + 94*(d.ml/Math.max(hiMl, w.target));
+      return '<div class="'+(d.ml>=w.target?'hit':'')+(i===6?' last':'')+
+        '" style="height:'+h+'%" title="'+d.date+' '+d.ml+' ml"></div>';
+    }).join('');
+
+    var rows = w.today.length
+      ? w.today.map(function(r){
+          return '<div class="wrow"><span class="t">'+r.time+' · '+esc(r.type)+'</span>'+
+            '<b>'+r.ml+' ml</b></div>';
+        }).join('')
+      : '<p class="note" style="margin:0">วันนี้ยังไม่ได้บันทึก — กดปุ่มข้างบนเลย</p>';
+
+    document.getElementById('waterBody').innerHTML =
+      '<div class="card hero" style="padding-bottom:16px">'+
+        '<div class="lbl">น้ำวันนี้</div>'+
+        '<div><span class="num" style="color:#0288d1">'+(w.ml/1000).toFixed(2)+'</span> '+
+          '<span class="unit">ลิตร</span></div>'+
+        '<div class="wbar"><i style="width:'+pct+'%"></i></div>'+
+        '<div class="sub">'+pct+'% ของเป้า '+(w.target/1000).toFixed(1)+' ล.'+
+          (w.left>0 ? ' · เหลืออีก '+w.left+' ml' : ' · ครบแล้ว ✓')+'</div>'+
+      '</div>'+
+
+      '<div class="card">'+
+        '<h2 style="margin-top:0">กดเพิ่มน้ำ</h2>'+
+        '<div class="wbtns">'+
+          '<div class="wbtn" onclick="putWater(500,\'น้ำเปล่า\')">+500<small>ขวดปกติ</small></div>'+
+          '<div class="wbtn" onclick="putWater(250,\'น้ำเปล่า\')">+250<small>ครึ่งขวด</small></div>'+
+          '<div class="wbtn" onclick="putWater(500,\'น้ำเกลือแร่\')">+500<small>เกลือแร่</small></div>'+
+          '<div class="wbtn" onclick="putWater(200,\'กาแฟดำ\')">+200<small>กาแฟดำ/ชา</small></div>'+
+        '</div>'+
+        '<label>หรือระบุเอง (ml)</label>'+
+        '<input type="number" step="50" inputmode="numeric" id="wt-ml" placeholder="500">'+
+        '<button id="wt-save" style="background:#0288d1" onclick="putWaterCustom()">บันทึก</button>'+
+        '<p class="note">เป้า 2.5 ล. ไม่ใช่ 3 ล. — น้ำ% ในเครื่องชั่งเป็นเงาของไขมัน% '+
+        'ไม่ใช่สัญญาณขาดน้ำ ไขมันลงแล้วเลข % จะขึ้นเอง<br>'+
+        'เกลือแร่/กาแฟดำนับด้วย เพราะช่วงอด 18 ชม. ดื่มได้<br>'+
+        'จิบให้หมดขวดใน 20-30 นาที อย่ากระดกทีเดียว · เลี่ยงดื่มเยอะหลัง 21:30 จะได้ไม่ตื่นฉี่</p>'+
+      '</div>'+
+
+      '<div class="card">'+
+        '<h2 style="margin-top:0">7 วันล่าสุด · เฉลี่ย '+(w.avg7/1000).toFixed(2)+' ล./วัน</h2>'+
+        '<div class="w7">'+bars+'</div>'+
+        '<p class="note">แท่งเข้ม = วันที่ถึงเป้า · แท่งขวาสุดคือวันนี้</p>'+
+      '</div>'+
+
+      '<div class="card"><h2 style="margin-top:0">บันทึกวันนี้</h2>'+ rows +'</div>';
+  }
+
+  function putWater(ml, type){
+    google.script.run
+      .withSuccessHandler(function(res){
+        renderWater(res);
+        toast('+'+ml+' ml — วันนี้ '+(res.ml/1000).toFixed(2)+' ล.'+
+          (res.left===0 ? ' ครบเป้า +1 🪙' : ''));
+        google.script.run.withSuccessHandler(renderCoin).getCoinData();   // ภารกิจ "น้ำครบ" อาจได้ coin
+      })
+      .withFailureHandler(function(e){ toast(e.message); })
+      .addWater({ ml: ml, type: type });
+  }
+
+  function putWaterCustom(){
+    var ml = num('wt-ml');
+    if(!ml){ toast('ใส่ปริมาณก่อน'); return; }
+    document.getElementById('wt-ml').value = '';
+    putWater(ml, 'น้ำเปล่า');
+  }
+
+  // ══════════ coin RPG ══════════
+  var C = null;
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function renderCoin(c){
+    C = c;
+    var missions = c.missions.map(function(m){
+      var n    = m.quota ? ((c.weekDone||{})[m.id] || 0) : 0;
+      var done = m.quota ? n >= m.quota : c.doneMissions.indexOf(m.id) > -1;
+      var tag  = m.quota ? ' <span style="color:var(--blue)">('+n+'/'+m.quota+' สัปดาห์นี้)</span>' : '';
+      var lock = done || m.auto;
+      return '<div class="mission'+(done?' done':(m.auto?' lock':''))+'"'+
+        (lock?'':' onclick="doMission(\''+m.id+'\')"')+'>'+
+        '<div class="ic">'+m.icon+'</div>'+
+        '<div class="info"><div class="nm">'+esc(m.name)+tag+'</div>'+
+          '<div class="ds">'+esc(m.desc)+'</div></div>'+
+        '<div class="cn">+'+m.coin+' 🪙</div></div>';
+    }).join('');
+
+    var rewards = c.rewards.map(function(r){
+      var ok = c.coins >= r.cost;
+      return '<div class="rw '+(ok?'ok':'no')+'"'+
+        (ok?' onclick="doRedeem(\''+r.id+'\')"':'')+'>'+
+        '<div class="ic">'+r.icon+'</div>'+
+        '<div class="nm">'+esc(r.name)+'</div>'+
+        '<div class="ct">'+r.cost+' 🪙</div>'+
+        '<div class="st">'+(ok?'✓ พร้อมแลก':'ขาดอีก '+(r.cost-c.coins))+'</div></div>';
+    }).join('');
+
+    var hist = c.history.length
+      ? c.history.map(function(h){
+          return '<div class="hist"><span>'+esc(h.date)+' · '+esc(h.desc)+'</span>'+
+            '<b class="'+(h.coin<0?'minus':'')+'">'+(h.coin>0?'+':'')+h.coin+' 🪙</b></div>';
+        }).join('')
+      : '<p class="note" style="margin:0">ยังไม่มีประวัติ — เริ่มภารกิจแรกได้เลย</p>';
+    // มีครบตามที่ขอ = อาจมีอีก
+    if (c.history.length >= c.histN)
+      hist += '<button style="background:#eceff1;color:var(--ink);margin-top:12px" '+
+        'onclick="moreHistory()">ดูย้อนหลังเพิ่ม</button>';
+
+    document.getElementById('coinBody').innerHTML =
+      '<div class="card coin-hero">'+
+        '<div class="lbl" style="font-size:13px;color:var(--muted)">🪙 COINS</div>'+
+        '<div class="num">'+c.coins+'</div>'+
+        '<div class="streak">🔥 '+c.streak+' วัน streak</div>'+
+        '<p class="note">ภารกิจรีเซ็ตเองทุกวัน ไม่ต้องกดรีเซ็ต</p>'+
+      '</div>'+
+      '<h2>⚡ ภารกิจวันนี้</h2>'+ missions +
+      '<h2>🏪 ร้านแลก coin</h2>'+
+      '<div class="grid">'+ rewards +'</div>'+
+      '<h2>📜 ประวัติล่าสุด</h2>'+
+      '<div class="card">'+ hist +'</div>'+
+      '<div class="card"><h2 style="margin-top:0">ย้ายยอดเก่าจากแอพเดิม</h2>'+
+        '<input type="number" inputmode="numeric" id="c-set" placeholder="จำนวน coin">'+
+        '<button onclick="doSetCoins()">ตั้งยอด coin</button>'+
+        '<p class="note">ใช้ครั้งเดียวตอนย้ายจากแอพ gym-coins เดิม — '+
+        'ลงเป็นแถว "ปรับยอด" ในชีต Coins ประวัติเดิมไม่ถูกแก้</p></div>';
+  }
+
+  function coinCall(fn, arg){
+    var r = google.script.run
+      .withSuccessHandler(function(res){ renderCoin(res); toast('อัปเดตแล้ว'); })
+      .withFailureHandler(function(e){ toast(e.message); });
+    arg === undefined ? r[fn]() : r[fn](arg);
+  }
+  function moreHistory(){ coinCall('getCoinData', C.histN + 30); }
+  function doMission(id){ coinCall('completeMission', id); }
+  function doRedeem(id){
+    var r = C.rewards.filter(function(x){return x.id===id;})[0];
+    if(confirm('แลก '+r.name+' ? ใช้ '+r.cost+' coin')) coinCall('redeemReward', id);
+  }
+  function doSetCoins(){
+    var v = document.getElementById('c-set').value;
+    if(v==='') { toast('ใส่จำนวนก่อน'); return; }
+    coinCall('setCoins', Number(v));
+  }
+
+  function load(){
+    google.script.run.withSuccessHandler(renderCoin)
+      .withFailureHandler(function(e){
+        document.getElementById('coinBody').innerHTML =
+          '<div class="card"><b>โหลด coin ไม่สำเร็จ</b><p class="note">'+e.message+'</p></div>';
+      }).getCoinData();
+    google.script.run.withSuccessHandler(render)
+      .withFailureHandler(function(e){
+        document.getElementById('dashBody').innerHTML =
+          '<div class="card"><b>โหลดไม่สำเร็จ</b><p class="note">'+e.message+'</p></div>';
+      }).getDashboardData();
+    google.script.run.withSuccessHandler(renderWater)
+      .withFailureHandler(function(e){
+        document.getElementById('waterBody').innerHTML =
+          '<div class="card"><b>โหลดยอดน้ำไม่สำเร็จ</b><p class="note">'+e.message+'</p></div>';
+      }).getWaterData();
+  }
+
+  function num(id){ var v = document.getElementById(id).value; return v==='' ? null : Number(v); }
+
+  function saveWeigh(){
+    var d = {
+      date: document.getElementById('w-date').value,
+      kg: num('w-kg'),
+      muscle: num('w-muscle'), bone: num('w-bone'),
+      fat: num('w-fat'), water: num('w-water'), vf: num('w-vf'),
+      note: document.getElementById('w-note').value
+    };
+    if(d.kg===null && (d.muscle===null || d.bone===null || d.fat===null)){
+      toast('กรอกน้ำหนัก หรือกรอก กล้ามเนื้อ+กระดูก+ไขมัน% ให้ครบ'); return;
+    }
+    var b = document.getElementById('w-save');
+    b.disabled = true; b.textContent = 'กำลังบันทึก…';
+    google.script.run.withSuccessHandler(function(res){
+      render(res);
+      b.disabled=false; b.textContent='บันทึกผลชั่ง';
+      ['w-kg','w-muscle','w-bone','w-fat','w-water','w-vf','w-note'].forEach(function(id){
+        document.getElementById(id).value='';
+      });
+      toast('บันทึกแล้ว +1 🪙 — เส้นเฉลี่ย '+(res.ma3?res.ma3.toFixed(2):'—')+' กก.');
+      google.script.run.withSuccessHandler(renderCoin).getCoinData();  // ภารกิจ "ชั่งวันนี้" ได้ coin เอง
+      go('dash');
+    }).withFailureHandler(function(e){
+      b.disabled=false; b.textContent='บันทึกผลชั่ง'; toast('ผิดพลาด: '+e.message);
+    }).addWeighIn(d);
+  }
+
+  function saveDrink(){
+    var ml = num('d-ml');
+    if(!ml){ toast('ยังไม่ได้ใส่ปริมาณ'); return; }
+    var d = {
+      date: document.getElementById('d-date').value,
+      ml: ml,
+      type: document.getElementById('d-type').value,
+      snack: document.getElementById('d-snack').value,
+      sodium: document.getElementById('d-sodium').checked,
+      note: document.getElementById('d-note').value
+    };
+    var b = document.getElementById('d-save');
+    b.disabled = true; b.textContent = 'กำลังบันทึก…';
+    google.script.run.withSuccessHandler(function(res){
+      render(res);
+      b.disabled=false; b.textContent='บันทึกการดื่ม';
+      document.getElementById('d-ml').value='';
+      document.getElementById('d-note').value='';
+      document.getElementById('d-sodium').checked=false;
+      document.querySelectorAll('#mlChips .chip').forEach(function(x){x.classList.remove('on');});
+      toast('บันทึกแล้ว — 7 วันล่าสุดรวม '+res.ml7+' ml');
+      google.script.run.withSuccessHandler(renderCoin).getCoinData();  // เผื่อภารกิจ "ไม่ดื่ม" ถูกยึดคืน
+      go('dash');
+    }).withFailureHandler(function(e){
+      b.disabled=false; b.textContent='บันทึกการดื่ม'; toast('ผิดพลาด: '+e.message);
+    }).addDrink(d);
+  }
+
+  load();
+</script>
+</body>
+</html>
