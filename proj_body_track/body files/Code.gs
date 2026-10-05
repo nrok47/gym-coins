@@ -577,6 +577,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('📊 Body Tracker')
     .addItem('ติดตั้ง / รีเซ็ตชีต', 'setupTracker')
     .addItem('บันทึกวันนี้ (ในชีต)', 'gotoNextRow')
+    .addItem('สร้างชีต Dashboard ใหม่ (ไม่แตะ Log)', 'rebuildDashboardOnly')
     .addItem('อัปเดต baseline ในชีต Dashboard', 'refreshBaselineInSheet')
     .addToUi();
 }
@@ -861,59 +862,136 @@ function buildBlood_(sh) {
 
 /* ─────────────────────────── Dashboard (ในชีต) ─────────────────────────── */
 
+/* ป้ายของแถวที่ถูกอ้างจากที่อื่น — ตัวเชื่อมระหว่าง buildDashboard_ กับ refreshBaselineInSheet
+ * ถ้าจะเปลี่ยนข้อความ เปลี่ยนที่นี่ที่เดียว */
+const DASH_LBL = {
+  ma:       '◆ เฉลี่ย 7 วัน ล่าสุด (กก.)',
+  progress: 'ความคืบหน้า'
+};
+
+/** โครงแผงสรุป — 1 รายการ = 1 แถว เรียงจากบนลงล่าง เริ่มที่แถว 3
+ *
+ *  v เป็นฟังก์ชันจะได้ R('key') มาใช้อ้างแถวอื่น ห้ามพิมพ์ 'B11' ตรงๆ
+ *  เหตุผล: เวอร์ชันก่อนฝัง B3/B8/B11/B21 ไว้ในสูตร แทรกแถวใหม่ทีเดียวพังทั้งแผง
+ *  และพังแบบเงียบ (สูตรยังคำนวณได้ แค่ชี้ผิดช่อง) — testDashboardSpec() จับเคสนี้
+ */
+function dashSpec_(last) {
+  return [
+    { key: 'ma',   label: DASH_LBL.ma,              v: '=' + last('J'), fmt: '0.00', band: 'green' },
+    { key: 'w',    label: '   น้ำหนักครั้งล่าสุด',    v: '=' + last('H'), fmt: '0.00', band: 'green' },
+    { key: 'bmi',  label: '   BMI',                  v: '=' + last('I'), band: 'green' },
+    {},
+    { key: 'ms',   label: 'เป้าระยะแรก (เคยทำได้ 30 พ.ค.)', v: CFG.MILESTONE },
+    { key: 'toMs', label: '   เหลืออีกถึงเป้าแรก (กก.)',
+      v: R => '=IFERROR(ROUND(' + R('ma') + '-' + CFG.MILESTONE + ',2),"-")', fmt: '0.00' },
+    { key: 'tg',   label: 'เป้าปลายทาง',             v: CFG.TARGET_WEIGHT },
+    { key: 'toTg', label: '   เหลืออีกถึงเป้าปลาย (กก.)',
+      v: R => '=IFERROR(ROUND(' + R('ma') + '-' + CFG.TARGET_WEIGHT + ',2),"-")', fmt: '0.00' },
+    { key: 'progress', label: DASH_LBL.progress,
+      v: R => '=IFERROR(MAX(0,(' + CFG.BASELINE + '-' + R('ma') + ')/(' +
+              CFG.BASELINE + '-' + CFG.TARGET_WEIGHT + ')),0)', fmt: '0.0%' },
+    {},
+    { key: 'rate', label: 'อัตราเปลี่ยน (กก./สัปดาห์)',
+      v: '=IFERROR(ROUND(SLOPE(S2:S7,R2:R7)*7,3),"-")', fmt: '0.000' },
+    { key: 'eta',  label: 'คาดถึงเป้าระยะแรก (สัปดาห์)',
+      v: R => '=IF(N(' + R('rate') + ')>=0,"ยังไม่ลด",IFERROR(ROUND(' +
+              R('toMs') + '/-' + R('rate') + ',1),"-"))' },
+    {},
+    { key: 'alert', label: '⚠ สัญญาณไหลขึ้น (จากเส้นเฉลี่ย)',
+      v: '=IF(COUNT(S2:S4)<3,"ข้อมูลไม่พอ",IF(AND(S2>S3,S3>S4),' +
+         '"🔴 เส้นเฉลี่ยขึ้น 3 ครั้งติด — หยุดแล้วหาสาเหตุ",' +
+         'IF(S2>S3,"🟡 ขึ้น 1 ครั้ง — จับตาครั้งหน้า","🟢 ทิศทางปกติ")))' },
+    {},
+    { key: 'vf',    label: '◆ ไขมันช่องท้อง', v: '=' + last('F'), band: 'pink' },
+    { key: 'vfTg',  label: '   เป้าหมาย',      v: CFG.TARGET_VF,   band: 'pink' },
+    {},
+    { key: 'ml30',  label: '🍺 เครื่องดื่ม 30 วันล่าสุด (ml)',
+      v: '=IFERROR(SUMIFS(Drinks!$B:$B,Drinks!$A:$A,">="&TODAY()-30),0)', band: 'purple' },
+    { key: 'kcal30', label: '   คิดเป็น kcal (ประมาณจากอัตราเบียร์)',
+      v: R => '=ROUND(' + R('ml30') + '*' + CFG.KCAL_PER_ML + ',0)', band: 'purple' },
+    { key: 'fat30',  label: '   คิดเป็นไขมัน (กก.)',
+      v: R => '=ROUND(' + R('kcal30') + '/' + CFG.KCAL_PER_KG_FAT + ',2)',
+      fmt: '0.00', band: 'purple' },
+    {},
+    // น้ำ — ยอดรายวันมาจากคอลัมน์ helper U/V (SUMIFS รายวัน 7 วันเขียนในสูตรเดียวไม่ได้)
+    { key: 'wToday', label: '💧 น้ำวันนี้ (ml)',
+      v: '=IFERROR(SUMIFS(Water!$B:$B,Water!$A:$A,">="&TODAY(),Water!$A:$A,"<"&TODAY()+1),0)',
+      band: 'blue' },
+    { key: 'wTg',    label: '   เป้า (ml)', v: CFG.WATER_TARGET_ML, band: 'blue' },
+    { key: 'wPct',   label: '   วันนี้ได้กี่ % ของเป้า',
+      v: R => '=IFERROR(' + R('wToday') + '/' + R('wTg') + ',0)', fmt: '0%', band: 'blue' },
+    { key: 'wAvg7',  label: '   เฉลี่ย 7 วัน (ml/วัน)',
+      v: '=IFERROR(ROUND(AVERAGE(V2:V8),0),0)', band: 'blue' },
+    { key: 'wHit7',  label: '   7 วันนี้ถึงเป้ากี่วัน',
+      v: R => '=IFERROR(COUNTIF(V2:V8,">="&' + R('wTg') + ')&" / 7","-")', band: 'blue' },
+    {},
+    { key: 'tgLast', label: 'TG ล่าสุด',
+      v: '=IFERROR(LOOKUP(2,1/(Blood!$B$2:$B$200<>""),Blood!$B$2:$B$200),"-")' },
+    { key: 'bloodAt', label: 'ตรวจเลือดครั้งล่าสุด',
+      v: '=IFERROR(LOOKUP(2,1/(Blood!$A$2:$A$200<>""),Blood!$A$2:$A$200),"-")', fmt: 'd mmm yy' }
+  ];
+}
+
+/** แปลงโครงเป็นเลขแถวจริง + ตัวอ้าง R('key') ที่คืน 'B<แถว>' */
+function dashResolve_(spec) {
+  const rowOf = {};
+  spec.forEach((r, i) => {
+    if (!r.key) return;
+    if (rowOf[r.key]) throw new Error('key ซ้ำในแผง Dashboard: ' + r.key);
+    rowOf[r.key] = i + 3;                 // แถว 1 = หัวข้อ, แถว 2 ว่าง, แผงเริ่มแถว 3
+  });
+  const R = k => {
+    if (!rowOf[k]) throw new Error('แผง Dashboard อ้าง key ที่ไม่มีจริง: ' + k);
+    return 'B' + rowOf[k];
+  };
+  const values = spec.map(r => [
+    r.label || '',
+    typeof r.v === 'function' ? r.v(R) : (r.v === undefined ? '' : r.v)
+  ]);
+  return { rowOf: rowOf, R: R, values: values };
+}
+
+/** หาแถวจากป้ายในคอลัมน์ A — ใช้กับชีตที่สร้างไว้แล้ว (เลขแถวอาจไม่ตรงกับ spec ปัจจุบัน) */
+function dashRowByLabel_(sh, label) {
+  const col = sh.getRange('A1:A80').getValues();
+  for (let i = 0; i < col.length; i++)
+    if (String(col[i][0]).trim() === String(label).trim()) return i + 1;
+  throw new Error('หาแถว "' + label + '" ในชีต ' + DASH + ' ไม่เจอ — ชีตอาจเป็นเวอร์ชันเก่า');
+}
+
 function buildDashboard_(sh, log) {
   const L = CFG.L;
   const last = c => 'IFERROR(LOOKUP(2,1/(Log!$' + c + '$2:$' + c + '$' + L + '<>""),Log!$' + c + '$2:$' + c + '$' + L + '),"")';
 
   sh.getRange('A1').setValue('สรุปความคืบหน้า').setFontSize(16).setFontWeight('bold');
 
-  sh.getRange('R1').setValue('helper — อย่าลบ');
+  sh.getRange('R1').setValue('helper น้ำหนัก — อย่าลบ');
   sh.getRange('R2').setFormula(
     '=IFERROR(QUERY(Log!A2:J' + L + ',"select A,J where J is not null order by A desc limit 6",0),"")');
 
-  const rows = [
-    ['◆ เฉลี่ย 7 วัน ล่าสุด (กก.)', '=' + last('J')],
-    ['   น้ำหนักครั้งล่าสุด', '=' + last('H')],
-    ['   BMI', '=' + last('I')],
-    ['', ''],
-    ['เป้าระยะแรก (เคยทำได้ 30 พ.ค.)', CFG.MILESTONE],
-    ['   เหลืออีก (กก.)', '=IFERROR(ROUND(B3-' + CFG.MILESTONE + ',2),"-")'],
-    ['เป้าปลายทาง', CFG.TARGET_WEIGHT],
-    ['   เหลืออีก (กก.)', '=IFERROR(ROUND(B3-' + CFG.TARGET_WEIGHT + ',2),"-")'],
-    ['ความคืบหน้า', '=IFERROR(MAX(0,(' + CFG.BASELINE + '-B3)/(' + CFG.BASELINE + '-' + CFG.TARGET_WEIGHT + ')),0)'],
-    ['', ''],
-    ['อัตราเปลี่ยน (กก./สัปดาห์)', '=IFERROR(ROUND(SLOPE(S2:S7,R2:R7)*7,3),"-")'],
-    ['คาดถึงเป้าระยะแรก (สัปดาห์)', '=IF(N(B13)>=0,"ยังไม่ลด",IFERROR(ROUND(B8/-B13,1),"-"))'],
-    ['', ''],
-    ['⚠ สัญญาณไหลขึ้น (จากเส้นเฉลี่ย)',
-      '=IF(COUNT(S2:S4)<3,"ข้อมูลไม่พอ",IF(AND(S2>S3,S3>S4),' +
-      '"🔴 เส้นเฉลี่ยขึ้น 3 ครั้งติด — หยุดแล้วหาสาเหตุ",' +
-      'IF(S2>S3,"🟡 ขึ้น 1 ครั้ง — จับตาครั้งหน้า","🟢 ทิศทางปกติ")))'],
-    ['', ''],
-    ['◆ ไขมันช่องท้อง', '=' + last('F')],
-    ['   เป้าหมาย', CFG.TARGET_VF],
-    ['', ''],
-    ['🍺 เครื่องดื่ม 30 วันล่าสุด (ml)',
-      '=IFERROR(SUMIFS(Drinks!$B:$B,Drinks!$A:$A,">="&TODAY()-30),0)'],
-    ['   คิดเป็น kcal (ประมาณจากอัตราเบียร์)', '=ROUND(B21*' + CFG.KCAL_PER_ML + ',0)'],
-    ['   คิดเป็นไขมัน (กก.)', '=ROUND(B22/' + CFG.KCAL_PER_KG_FAT + ',2)'],
-    ['', ''],
-    ['TG ล่าสุด', '=IFERROR(LOOKUP(2,1/(Blood!$B$2:$B$200<>""),Blood!$B$2:$B$200),"-")'],
-    ['ตรวจเลือดครั้งล่าสุด', '=IFERROR(LOOKUP(2,1/(Blood!$A$2:$A$200<>""),Blood!$A$2:$A$200),"-")']
-  ];
+  // helper น้ำ: U = วันที่ย้อนหลัง 7 วัน (เก่า→ใหม่) · V = ยอด ml ของวันนั้น
+  sh.getRange('U1').setValue('helper น้ำ — อย่าลบ');
+  const uv = [];
+  for (let i = 6; i >= 0; i--) {
+    const r = uv.length + 2;
+    uv.push(['=TODAY()-' + i,
+      '=IFERROR(SUMIFS(Water!$B:$B,Water!$A:$A,">="&U' + r + ',Water!$A:$A,"<"&U' + r + '+1),0)']);
+  }
+  sh.getRange(2, 21, uv.length, 2).setFormulas(uv);
+  sh.getRange('U2:U8').setNumberFormat('d mmm yy');
 
-  sh.getRange(3, 1, rows.length, 2).setValues(rows);
-  sh.getRange(3, 1, rows.length, 1).setFontWeight('bold');
-  sh.getRange('A3:B5').setBackground('#e8f5e9');
-  sh.getRange('B3').setFontSize(22).setFontColor('#1b5e20');
-  sh.getRange('A18:B19').setBackground('#fce4ec');
-  sh.getRange('A21:B23').setBackground('#f3e5f5');
-  sh.getRange('B3:B4').setNumberFormat('0.00');
-  sh.getRange('B8').setNumberFormat('0.00');
-  sh.getRange('B10').setNumberFormat('0.00');
-  sh.getRange('B11').setNumberFormat('0.0%');
-  sh.getRange('B13').setNumberFormat('0.000');
-  sh.getRange('B26').setNumberFormat('d mmm yy');
+  const spec = dashSpec_(last);
+  const d = dashResolve_(spec);
+  sh.getRange(3, 1, d.values.length, 2).setValues(d.values);
+  sh.getRange(3, 1, d.values.length, 1).setFontWeight('bold');
+
+  const BAND = { green: '#e8f5e9', pink: '#fce4ec', purple: '#f3e5f5', blue: '#e1f5fe' };
+  spec.forEach((r, i) => {
+    if (r.fmt)  sh.getRange(i + 3, 2).setNumberFormat(r.fmt);
+    if (r.band) sh.getRange(i + 3, 1, 1, 2).setBackground(BAND[r.band]);
+  });
+
+  sh.getRange(d.R('ma')).setFontSize(22).setFontColor('#1b5e20');
   sh.setColumnWidth(1, 280);
   sh.setColumnWidth(2, 340);
 
@@ -921,7 +999,11 @@ function buildDashboard_(sh, log) {
     SpreadsheetApp.newConditionalFormatRule()
       .setGradientMaxpointWithValue('#2e7d32', SpreadsheetApp.InterpolationType.NUMBER, '1')
       .setGradientMinpointWithValue('#ffffff', SpreadsheetApp.InterpolationType.NUMBER, '0')
-      .setRanges([sh.getRange('B11')]).build()
+      .setRanges([sh.getRange(d.R('progress'))]).build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .setGradientMaxpointWithValue('#0277bd', SpreadsheetApp.InterpolationType.NUMBER, '1')
+      .setGradientMinpointWithValue('#ffffff', SpreadsheetApp.InterpolationType.NUMBER, '0')
+      .setRanges([sh.getRange(d.R('wPct'))]).build()
   ]);
 
   sh.insertChart(sh.newChart().asLineChart()
@@ -954,20 +1036,86 @@ function buildDashboard_(sh, log) {
     })
     .setOption('vAxes', { 0: { title: 'Visceral Fat' }, 1: { title: 'เบียร์ (ml)' } })
     .build());
+
+  sh.insertChart(sh.newChart().asColumnChart()
+    .addRange(sh.getRange('U2:U8'))
+    .addRange(sh.getRange('V2:V8'))
+    .setPosition(34, 4, 0, 0)
+    .setOption('title', '💧 น้ำ 7 วันล่าสุด (ml/วัน) — เป้า ' + CFG.WATER_TARGET_ML)
+    .setOption('width', 620).setOption('height', 240)
+    .setOption('legend', { position: 'none' })
+    .setOption('series', { 0: { color: '#0288d1' } })
+    .build());
+}
+
+/** เช็คว่าแผง Dashboard ไม่มีใครฝังเลขแถวไว้ในสูตร — เคสที่พังเงียบที่สุด
+ *  Run ตัวนี้ใน editor ได้เลย ไม่แตะชีต */
+function testDashboardSpec() {
+  const spec = dashSpec_(c => 'LAST(' + c + ')');
+
+  // 1. สูตรต้องอ้างแถวผ่าน R('key') เท่านั้น ห้ามมีช่องแบบ B11 ฝังในซอร์ส
+  spec.forEach(r => {
+    if (typeof r.v !== 'function') return;
+    // จับเฉพาะคอลัมน์ B = คอลัมน์ของแผงเอง (U/V/R/S เป็น helper คงที่ อ้างตรงๆ ได้)
+    const m = r.v.toString().match(/B\d+/);
+    if (m) throw new Error('แถว "' + r.label + '" ฝังช่อง ' + m[0] +
+      ' ไว้ในสูตร — ต้องใช้ R(key) แทน');
+  });
+
+  // 2. ทุก key ที่ถูกอ้างต้องมีจริง (dashResolve_ จะ throw เองถ้าไม่มี)
+  const d = dashResolve_(spec);
+
+  // 3. เคสที่รู้ว่าต้องเจอ — อ้าง key ที่ไม่มีต้อง throw ไม่ใช่คืนค่าเงียบๆ
+  try { d.R('ไม่มีคีย์นี้'); throw new Error('อ้าง key ที่ไม่มีแล้วไม่ throw'); } catch (e) {
+    if (e.message.indexOf('ไม่มีจริง') === -1) throw e;
+  }
+
+  // 4. เคสที่รู้ว่าต้องเจอ — key ซ้ำต้อง throw
+  try {
+    dashResolve_([{ key: 'x' }, { key: 'x' }]);
+    throw new Error('key ซ้ำแล้วไม่ throw');
+  } catch (e) {
+    if (e.message.indexOf('ซ้ำ') === -1) throw e;
+  }
+
+  // 5. ป้ายที่ refreshBaselineInSheet ไปหาในชีต ต้องมีอยู่ในแผงจริง และไม่ซ้ำกับแถวอื่น
+  const labels = spec.map(r => r.label);
+  [DASH_LBL.ma, DASH_LBL.progress].forEach(lbl => {
+    const n = labels.filter(x => x === lbl).length;
+    if (n !== 1) throw new Error('DASH_LBL ไม่ตรงกับแผง (เจอ ' + n + ' แถว): ' + lbl);
+  });
+
+  Logger.log('ผ่านหมด — ' + Object.keys(d.rowOf).length + ' แถวมีคีย์ · ' +
+    'ความคืบหน้าอยู่แถว ' + d.rowOf.progress + ' · น้ำวันนี้แถว ' + d.rowOf.wToday);
+}
+
+/** สร้างแผง Dashboard ใหม่ทั้งชีต โดยไม่แตะ Log / Drinks / Water / Coins
+ *  ใช้ตัวนี้เวลาเพิ่มแถวใหม่ในแผง (เช่นแถวน้ำ) — ห้ามใช้ setupTracker ซึ่งล้าง Log
+ *  Dashboard เป็นชีตที่สร้างใหม่ได้ฟรี เพราะไม่มีข้อมูลของตัวเอง มีแต่สูตรที่ชี้ไปชีตอื่น */
+function rebuildDashboardOnly() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const log = mustSheet_(LOG);
+  waterSheet_();                       // ต้องมีก่อน ไม่งั้นสูตรน้ำขึ้น #REF!
+  const dash = resetSheet_(ss, DASH);
+  buildDashboard_(dash, log);
+  ss.setActiveSheet(dash);
+  SpreadsheetApp.getUi().alert(
+    'สร้างชีต Dashboard ใหม่แล้ว — Log ' + (nextRow_(log) - 2) + ' แถวไม่ถูกแตะ');
 }
 
 /** เขียนสูตรความคืบหน้าในชีต Dashboard ใหม่ตาม CFG.BASELINE ปัจจุบัน
  *  มีแยกเพราะ setupTracker สร้าง Log ใหม่จาก hist 21 จุด = ผลชั่งหลัง 7 ส.ค. 69 หายหมด
- *  ห้ามบอกให้รัน setupTracker เพื่อแก้ตัวเลขเดียว หน้าเว็บคำนวณจาก CFG สดอยู่แล้ว ไม่ต้องรันอะไร */
+ *  ห้ามบอกให้รัน setupTracker เพื่อแก้ตัวเลขเดียว หน้าเว็บคำนวณจาก CFG สดอยู่แล้ว ไม่ต้องรันอะไร
+ *  หาแถวจากป้ายไม่ใช่เลขแถว — ชีตที่สร้างด้วยเวอร์ชันเก่าก็ยังแก้ได้ */
 function refreshBaselineInSheet() {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DASH);
-  if (!sh) throw new Error('ยังไม่มีชีต ' + DASH);
-  const cell = sh.getRange('B11');          // แถว "ความคืบหน้า" ใน buildDashboard_
-  if (sh.getRange('A11').getValue().toString().indexOf('ความคืบหน้า') === -1)
-    throw new Error('A11 ไม่ใช่แถว "ความคืบหน้า" แล้ว — เช็ค buildDashboard_ ก่อนเขียนทับ');
-  cell.setFormula('=IFERROR(MAX(0,(' + CFG.BASELINE + '-B3)/(' +
-    CFG.BASELINE + '-' + CFG.TARGET_WEIGHT + ')),0)');
-  SpreadsheetApp.getUi().alert('อัปเดต baseline เป็น ' + CFG.BASELINE + ' กก. แล้ว');
+  const sh = mustSheet_(DASH);
+  const maRef = 'B' + dashRowByLabel_(sh, DASH_LBL.ma);
+  const row = dashRowByLabel_(sh, DASH_LBL.progress);
+  sh.getRange(row, 2)
+    .setFormula('=IFERROR(MAX(0,(' + CFG.BASELINE + '-' + maRef + ')/(' +
+      CFG.BASELINE + '-' + CFG.TARGET_WEIGHT + ')),0)')
+    .setNumberFormat('0.0%');
+  SpreadsheetApp.getUi().alert('อัปเดต baseline เป็น ' + CFG.BASELINE + ' กก. แล้ว (แถว ' + row + ')');
 }
 
 /** ไปแถวว่างถัดไปในชีต Log */

@@ -25,6 +25,8 @@ Body Composition Tracker ของ CK เอง (ไม่ใช่งาน ศ
 - **ห้ามบอกให้รัน `setupTracker` เพื่อแก้ตัวเลขเดียว** — มันสร้างชีต Log ใหม่จาก `hist` 21 จุด (ถึง 7 ส.ค. 69) ผลชั่งหลังจากนั้นหายหมด
   แก้ baseline ในชีตใช้เมนู "อัปเดต baseline ในชีต Dashboard" = `refreshBaselineInSheet()` เขียนแค่ B11 · หน้าเว็บคำนวณจาก `CFG` สดอยู่แล้ว ไม่ต้องรันอะไร
 - ชีตใหม่ให้สร้างแบบ lazy (`waterSheet_()` / `drinkSheet_()` / `coinSheet_()`) ห้ามไปผูกกับ `setupTracker`
+- **แผง Dashboard ห้ามพิมพ์ช่อง `B11` ตรงๆ ในสูตร** ใช้ `R('key')` ของ `dashSpec_` → `testDashboardSpec()` จับเคสนี้ให้
+  อัปเดตแผงใช้เมนู "สร้างชีต Dashboard ใหม่ (ไม่แตะ Log)" = `rebuildDashboardOnly()`
 - deploy ต้อง `clasp create-deployment -i <deployment id เดิม>` เสมอ — `clasp deploy` เปล่าๆ ได้ URL ใหม่ + กิน version quota (เพดาน 200/project)
 - **`clasp run-function` ใช้กับ project นี้ไม่ได้** (ไม่มี GCP project ผูก → `NOT_FOUND`) เทส `testCoinLogic` ต้องเปิด editor กด Run เอง
   ผ่านครั้งล่าสุด 5 ต.ค. 69 07:19 "ผ่านหมด — ยอดกลับเป็น 8"
@@ -41,11 +43,13 @@ Body Composition Tracker ของ CK เอง (ไม่ใช่งาน ศ
 
 ## สถานะ (5 ต.ค. 69)
 
+- deploy **@8 "v10"** — Dashboard เลิก hardcode เลขแถว (key-based spec) + แถวน้ำ 5 แถว + กราฟน้ำ 7 วัน
 - deploy @7 "v9" — ชีต Water + แท็บ 💧 น้ำ + ภารกิจ `m9` น้ำครบ (auto) / `m8` ปิด window 18:00
 - CK เริ่ม **IF 18/6 แบบ 12:00–18:00** (เลือกรูปแบบที่ไม่ตัดมื้อเย็นกับลูก)
 - บันทึกผลชั่ง 4 ต.ค. + อัปเดต baseline ในชีตแล้ว
 - ยอด coin = 8
-- git init แล้ว **ยังไม่มี remote ยังไม่ commit แรก** (เป็น push แรก ต้องถาม CK ก่อน)
+- **push ขึ้น https://github.com/nrok47/gym-coins แล้ว (PUBLIC)** — CK เคาะเองหลังผมเตือนว่าในนี้มีน้ำหนัก 21 จุด + ผลเลือด TG 287/LDL 178/HDL 34 + URL ชีต
+  repo นั้นมีอยู่ก่อนแล้วเป็น public (ของ 28 พ.ค. 69) merge แบบ `--allow-unrelated-histories -X ours`
 
 ## ของค้าง
 
