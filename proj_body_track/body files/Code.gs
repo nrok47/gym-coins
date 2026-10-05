@@ -571,57 +571,87 @@ function eq2_(a, b) {
   if (a !== b) throw new Error('ยอด coin ไม่กลับที่เดิม: ' + a + ' ≠ ' + b);
 }
 
+/** ลบชีต __test_* ที่ตกค้างจากเทสที่ล้มกลางทาง — เรียกเองได้ถ้าเจอแท็บแปลกใน Sheet */
+function cleanupTestSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const gone = [];
+  ss.getSheets().forEach(sh => {
+    if (sh.getName().indexOf('__test_') === 0) { gone.push(sh.getName()); ss.deleteSheet(sh); }
+  });
+  Logger.log(gone.length ? 'ลบชีตตกค้าง: ' + gone.join(', ') : 'ไม่มีชีตตกค้าง');
+  return gone;
+}
+
 /** เทสว่า setupTracker ลบข้อมูลไม่ได้อีกแล้ว — ทำบนชีตชั่วคราว ไม่แตะชีตจริง
  *  Run ตัวนี้ใน editor · ชีต __test_* ถูกลบคืนทุกกรณีใน finally
  *
  *  เทสทั้งสองสาขาที่รู้ว่าต้องเจอ: ชีตว่าง -> seed ลง · ชีตมีข้อมูล -> seed ต้องเงียบ
- *  (เคสที่สองคือบั๊กที่ทำผลชั่งหลัง 7 ส.ค. 69 หายไป 6 แถว) */
+ *  (เคสที่สองคือบั๊กที่ทำผลชั่งหลัง 7 ส.ค. 69 หายไป 6 แถว)
+ *
+ *  ทุกขั้นมี Logger.log กำกับ เพราะ GAS ชอบคืน "เกิดข้อผิดพลาดที่ไม่รู้จัก" เปล่าๆ
+ *  ไม่มีชื่อฟังก์ชันไม่มี stack — ดู log บรรทัดสุดท้ายแล้วรู้เลยว่าค้างที่ขั้นไหน */
 function testSetupNonDestructive() {
+  const ROWS = 60;                    // เทสแค่ 60 แถวพอ ของจริง 500 (เบากว่า 8 เท่า)
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const active = ss.getActiveSheet();
-  const sh = ss.insertSheet('__test_log_' + Date.now());
+  let step = '0. ยังไม่เริ่ม';
+  const at = t => { step = t; Logger.log('→ ' + t); };
   const eq = (a, b, msg) => { if (a !== b) throw new Error(msg + ' — ได้ ' + a + ' ควรเป็น ' + b); };
 
+  at('0. ล้างชีตตกค้างจากรอบก่อน');
+  cleanupTestSheets();
+
+  at('1. สร้างชีตชั่วคราว');
+  const sh = ss.insertSheet('__test_log_' + Date.now());
+
   try {
-    // ── สาขา 1: ชีตว่าง -> ต้องลงข้อมูลตั้งต้น ──
+    at('2. ชีตใหม่ต้องมี 0 แถว');
     eq(sheetDataRows_(sh), 0, 'ชีตใหม่ไม่ควรมีแถวข้อมูล');
-    buildLogChrome_(sh);
+
+    at('3. buildLogChrome_ ครั้งแรก (' + ROWS + ' แถว)');
+    buildLogChrome_(sh, ROWS);
     eq(sheetDataRows_(sh), 0, 'buildLogChrome_ ไม่ควรเขียนค่าลงคอลัมน์ A');
+
+    at('4. ชีตว่าง -> seedLog_ ต้องลง 21 จุด');
     eq(seedLog_(sh), 21, 'ชีตว่างแต่ไม่ได้ลงข้อมูลตั้งต้น 21 จุด');
     eq(sheetDataRows_(sh), 21, 'นับแถวหลัง seed ไม่ตรง');
 
-    // ── สาขา 2: มีข้อมูลแล้ว -> seed ต้องไม่เขียนอะไรเลย ──
+    at('5. มีข้อมูลแล้ว -> seedLog_ ต้องคืน 0 ไม่เขียนอะไร  [บั๊กตัวจริง]');
     eq(seedLog_(sh), 0, 'ชีตมีข้อมูลอยู่แล้วแต่ seed ยังเขียนทับ');
     eq(sheetDataRows_(sh), 21, 'seed รอบสองทำจำนวนแถวเปลี่ยน');
 
-    // ── สาขา 3: แถวที่ผู้ใช้เพิ่มเองหลังข้อมูลตั้งต้น ต้องรอดจากการซ่อมโครง ──
-    const mine = new Date(2026, 9, 5);
-    sh.getRange(23, 1, 1, 6).setValues([[mine, 53.77, 2.87, 24.6, 51.7, 12]]);
+    at('6. เพิ่มแถวที่กรอกเอง (แถว 23)');
+    sh.getRange(23, 1, 1, 6).setValues([[new Date(2026, 9, 5), 53.77, 2.87, 24.6, 51.7, 12]]);
     sh.getRange(23, 15).setValue(75.1);
     eq(sheetDataRows_(sh), 22, 'เพิ่มแถวเองแล้วนับไม่ขึ้น');
 
-    buildLogChrome_(sh);
+    at('7. ซ่อมโครงซ้ำ -> แถวที่กรอกเองต้องรอด');
+    buildLogChrome_(sh, ROWS);
     eq(seedLog_(sh), 0, 'ซ่อมโครงแล้ว seed กลับมาเขียนทับ');
     eq(sheetDataRows_(sh), 22, 'ซ่อมโครงแล้วจำนวนแถวหาย');
     eq(sh.getRange(23, 2).getValue(), 53.77, 'ค่ากล้ามเนื้อที่กรอกเองหาย');
     eq(sh.getRange(23, 15).getValue(), 75.1, 'น้ำหนักที่กรอกเองหาย');
+
+    at('8. สูตรคอลัมน์ H ต้องยังทำงาน');
     SpreadsheetApp.flush();
     eq(sh.getRange(23, 8).getValue(), 75.1, 'สูตรคอลัมน์ H ไม่ทำงานหลังซ่อมโครง');
 
-    // ── สาขา 4: dataSheet_ ต้องไม่ล้างค่า (ต่างจาก resetSheet_) ──
-    const before = sh.getRange(23, 2).getValue();
+    at('9. dataSheet_ ต้องไม่ล้างค่า');
     dataSheet_(ss, sh.getName());
-    eq(sh.getRange(23, 2).getValue(), before, 'dataSheet_ ล้างค่าในตาราง');
+    eq(sh.getRange(23, 2).getValue(), 53.77, 'dataSheet_ ล้างค่าในตาราง');
 
-    // ── สาขา 5: เคสที่รู้ว่าต้องพัง — resetSheet_ ยังต้องล้างอยู่ (ใช้กับ Dashboard) ──
+    at('10. resetSheet_ ต้องยังล้างได้อยู่  [ถ้าข้อนี้ไม่พัง เทสทั้งชุดวัดอะไรไม่ได้]');
     resetSheet_(ss, sh.getName());
     eq(sheetDataRows_(sh), 0, 'resetSheet_ ไม่ล้างแล้ว แปลว่าเทสนี้วัดอะไรไม่ได้');
 
     Logger.log('ผ่านหมด — ชีตว่าง seed 21 จุด / ชีตมีข้อมูล seed = 0 / ' +
       'ซ่อมโครงแล้วแถวที่กรอกเองยังอยู่ครบ');
+  } catch (e) {
+    Logger.log('ล้มที่ขั้น ' + step);
+    throw new Error('ล้มที่ขั้น ' + step + ' :: ' + e.message);
   } finally {
-    ss.deleteSheet(sh);
-    ss.setActiveSheet(active);
+    try { ss.deleteSheet(sh); } catch (e) { Logger.log('ลบชีตชั่วคราวไม่ได้: ' + e.message); }
+    try { ss.setActiveSheet(active); } catch (e) {}
   }
 }
 
@@ -633,6 +663,7 @@ function onOpen() {
     .addItem('บันทึกวันนี้ (ในชีต)', 'gotoNextRow')
     .addItem('สร้างชีต Dashboard ใหม่ (ไม่แตะ Log)', 'rebuildDashboardOnly')
     .addItem('อัปเดต baseline ในชีต Dashboard', 'refreshBaselineInSheet')
+    .addItem('ลบชีต __test_ ที่ตกค้าง', 'cleanupTestSheets')
     .addToUi();
 }
 
@@ -801,8 +832,10 @@ function buildWater_(sh) {
 
 /** โครงชีต Log — หัวตาราง สูตร รูปแบบ โน้ต · เรียกซ้ำได้ ไม่แตะค่าที่กรอกไว้
  *  เขียนทับเฉพาะคอลัมน์ที่เป็น "สูตร" (G H I J K L N) ส่วน A-F, M, O เป็นของผู้ใช้ ไม่แตะ */
-function buildLogChrome_(sh) {
-  const L = CFG.L;
+function buildLogChrome_(sh, rows) {
+  // rows มีไว้ให้เทสรันแบบเบา — ของจริงไม่ส่งมา ใช้ CFG.L เต็ม 500 แถว
+  // (chrome เขียนสูตรทีละแถว 2 คอลัมน์ = ~1,000 สูตร/ครั้ง หนักพอที่จะทำ Sheets สะอึกบนชีตชั่วคราว)
+  const L = rows || CFG.L;
 
   header_(sh, [
     'วันที่', 'กล้ามเนื้อ (กก.)', 'กระดูก (กก.)', 'ไขมัน (%) อ้างอิง', 'น้ำ (%) อ้างอิง',
